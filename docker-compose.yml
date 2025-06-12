@@ -1,0 +1,51 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      # - redis
+    environment:
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/appdb?sslmode=disable
+    volumes:
+      - .:/app
+    develop:
+      watch:
+        - action: rebuild
+          path: ./
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # redis:
+  #   image: redis:7
+  #   ports:
+  #     - "6379:6379"
+
+  migrate:
+      image: migrate/migrate
+      environment:
+        - DATABASE_URL=postgres://postgres:password@localhost:5432/appdb?sslmode=disable&search_path=public
+      volumes:
+        - ./migrations:/migrations
+      depends_on:
+        - postgres
+
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    ports:
+      - 8081:8978
+    volumes:
+      - cloudbeaver:/opt/cloudbeaver/workspace
+    # restart: unless-stopped
+volumes:
+  pgdata:
+  cloudbeaver:
