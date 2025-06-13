@@ -1,0 +1,423 @@
+openapi: 3.0.4
+info:
+  title: Auto Myself API
+  description: |-
+    API that allows for secure zero knowledge storage and sharing of data
+    that AutoMyself is given.
+  termsOfService: https://api.automyself.com/tos
+  contact:
+    email: api@automyself.com
+  license:
+    name: CC BY 4.0
+    url: https://creativecommons.org/licenses/by/4.0/legalcode.en
+  version: "0.1"
+externalDocs:
+  description: Find out more about AutoMyself
+  url: https://automyself.com
+servers:
+  - url: https://api.automyself.com/api/v0
+tags:
+  - name: user
+    description: Operations about users
+  - name: vehicle
+    description: Operations about vehicles
+  - name: maintenance
+    description: Operations about maintenance
+paths:
+  /user/{user_uuid}:
+    parameters:
+      - name: user_uuid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - user
+      summary: Find user by uuid
+      operationId: findUserByUuid
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserForGet'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/DefaultWithError'
+  /user:
+    get:
+      tags:
+        - user
+      summary: Get your user
+      operationId: getUser
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserForGet'
+        default:
+          $ref: '#/components/responses/DefaultWithError'
+    patch:
+      tags:
+        - user
+      summary: Update your user
+      description: Update public/private keys OR username
+      operationId: updateUser
+      requestBody:
+        description: Update your user. If updating keys, **both** must be provided.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '204':
+          $ref: '#/components/responses/Success'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        default:
+          $ref: '#/components/responses/DefaultWithError'
+    delete:
+      tags:
+        - user
+      summary: Delete all user data
+      operationId: deleteUser
+      responses:
+        '204':
+          $ref: "#/components/responses/Deleted"
+        default:
+          $ref: '#/components/responses/DefaultWithError'
+  /vehicle/{vehicle_uuid}:
+    parameters:
+      - name: vehicle_uuid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - vehicle
+      summary: Find vehicle by uuid
+      operationId: getVehicleById
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleForGet'
+        '404':
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+    put:
+      tags:
+        - vehicle
+      summary: Update vehicle
+      operationId: updateVehicle
+      requestBody:
+        description: Update an existing vehicle
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+      responses:
+        '204':
+          $ref: "#/components/responses/Updated"
+        '403':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+    delete:
+      tags:
+        - vehicle
+      summary: Delete vehicle
+      responses:
+        '204':
+          $ref: "#/components/responses/Deleted"
+        '403':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+  /vehicle/all:
+    get:
+      tags:
+        - vehicle
+      summary: Returns all vehicle locations
+      operationId: getAllVehicles
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: path
+                  example: '/vehicle/613d1d6b-b4bf-4fd3-85cc-54a6bb660789'
+        default:
+          $ref: '#/components/responses/DefaultWithError'
+  /vehicle:
+    post:
+      tags:
+        - vehicle
+      summary: Create new vehicle
+      operationId: createVehicle
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+        required: true
+      responses:
+        '201':
+          description: The resource was successfully created
+          headers:
+            Location:
+              schema:
+                type: string
+                format: path
+                example: '/vehicle/613d1d6b-b4bf-4fd3-85cc-54a6bb660789'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+  /mainainence/{mainainence_uuid}:
+    parameters:
+      - name: mainainence_uuid
+        in: path
+        description: ID of user to return
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - maintenance
+      summary: Get maintenance by id
+      operationId: getMaintenanceById
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Maintenance'
+        '404':
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+    put:
+      tags:
+        - maintenance
+      summary: Update maintenance
+      operationId: updateMaintenance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Maintenance'
+      responses:
+        '204':
+          $ref: "#/components/responses/Updated"
+        '403':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+    delete:
+      tags:
+        - maintenance
+      responses:
+        '204':
+          $ref: "#/components/responses/Deleted"
+        '403':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+  /mainainence:
+    post:
+      tags:
+        - maintenance
+      summary: Create new maintenance
+      operationId: createMaintenance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Maintenance'
+        required: true
+      responses:
+        '201':
+          description: The resource was successfully created
+          headers:
+            Location:
+              schema:
+                type: string
+                format: path
+                example: '/maintenance/613d1d6b-b4bf-4fd3-85cc-54a6bb660789'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        default:
+          $ref: "#/components/responses/DefaultWithError"
+components:
+  schemas:
+    Vehicle:
+      type: object
+      properties:
+        make:
+          type: string
+          example: "Mazda"
+        make_id:
+          type: integer
+          format: int64
+          example: 500
+        model:
+          type: string
+          example: "MX-5 Miata"
+        model_id:
+          type: integer
+          format: int64
+          example: 500
+        year:
+          type: integer
+          format: int64
+          example: 1990
+        vin:
+          type: string
+          example: "ABC"
+        lpn:
+          type: string
+          example: "123"
+        nickname:
+          type: string
+          example: "Weekend Fun"
+        created_at:
+          type: string
+          format: datetime
+          example: "2019-12-31"
+        updated_at:
+          type: string
+          format: datetime
+          example: "2020-03-15"
+        notes:
+          type: string
+          example: "Keeping this one around for the weekends"
+    VehicleForGet:
+      allOf: 
+        - $ref: "#/components/schemas/Vehicle"
+        - type: object
+          properties:
+            maintenance_locations:
+              type: array
+              items:
+                type: string
+                format: path
+                example: "/maintenance/613d1d6b-b4bf-4fd3-85cc-54a6bb660789"
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+          example: 'My Name'
+    UserForGet:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            location:
+              type: string
+              format: path
+              example: "/user/613d1d6b-b4bf-4fd3-85cc-54a6bb660789"
+    Maintenance:
+      type: object
+      properties:
+        type:
+          type: string
+          example: "Oil change"
+        interval:
+          type: integer
+          format: int64
+          example: 5000
+        interval_unit:
+          type: string
+          example: "miles"
+        date:
+          type: string
+          format: date
+          example: "2020-01-01"
+        cost:
+          type: string
+          example: "$29.99"
+        odometer:
+          type: string
+          example: "123,456"
+        notes:
+          type: string
+          example: "Really should have used a shop"
+        vehicle_uuid:
+          type: string
+          format: uuid
+          example: "613d1d6b-b4bf-4fd3-85cc-54a6bb660789"
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message     
+  responses:
+    BadId:
+      description: Bad ID
+    Deleted:    
+      description: Deleted
+    Updated:    
+      description: Updated
+    Unauthorized:
+      description: Unauthorized
+    NotFound:
+      description: Not found
+    Unprocessable:
+      description: Validation exception
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                field:
+                  type: string
+                  example: year
+                error:
+                  type: string
+                  example: "Not a number"
+    Success:
+      description: Successfully completed
+    DefaultWithError:
+      description: Unexpected error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
