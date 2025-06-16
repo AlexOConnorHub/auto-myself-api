@@ -3,16 +3,21 @@ package routes
 import (
 	"auto-myself-server/controllers"
 
+	"github.com/fufuok/favicon"
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.Engine) {
-	public := router.Group("/public")
+func SetupRoutes(r *gin.Engine) {
+	r.Use(favicon.New(favicon.Config{
+		File: "favicon.ico",
+	}))
+
+	public := r.Group("/public")
 	{
 		public.GET("/ping", controllers.PublicPing)
 	}
 
-	private := router.Group("/")
+	private := r.Group("/")
 	// private.Use(middleware.CheckJWT())
 	{
 		user := private.Group("/user")

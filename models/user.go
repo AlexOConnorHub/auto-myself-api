@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/samborkent/uuidv7"
+	"gorm.io/gorm"
 )
 
 type User struct {
@@ -18,8 +19,8 @@ func (User) TableName() string {
 	return "users"
 }
 
-func (u *User) BeforeCreate() error {
-	// Generate a new UUID for the user ID
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	u.ID = uuidv7.New().String()
-	return nil
+
+	return
 }

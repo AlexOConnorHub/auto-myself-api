@@ -1,22 +1,27 @@
 package main
 
 import (
+	"auto-myself-server/database"
 	"auto-myself-server/routes"
+	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	router := gin.Default()
-	router.TrustedPlatform = gin.PlatformCloudflare
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
-	router.GET("/favicon.ico", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
+	database.Init()
 
-	routes.SetupRoutes(router)
+	r := gin.Default()
+	r.TrustedPlatform = gin.PlatformCloudflare
+	r.SetTrustedProxies(nil)
 
-	router.Run(":8080") // listen and serve on 0.0.0.0:8080
+	routes.SetupRoutes(r)
+
+	r.Run(":8080")
 }
