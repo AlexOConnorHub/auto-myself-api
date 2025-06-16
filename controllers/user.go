@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"auto-myself-server/database"
 	"auto-myself-server/models"
 	"net/http"
 
@@ -8,15 +9,16 @@ import (
 )
 
 func GetUserById(c *gin.Context) {
-	final := models.User{
-		ID:         c.Param("uuid"),
-		Username:   "testuser",
-		CreatedAt:  "2023-10-01T12:00:00Z",
-		UpdatedAt:  "2023-10-01T12:00:00Z",
-		DeletedAt:  "",
-		PublicKey:  "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3...",
-		PrivateKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3...",
+	var final = models.User{
+		ID: c.Param("uuid"),
 	}
+	database.DB.Limit(1).Find(&final)
+
+	if final.CreatedAt != "" {
+		c.Request.Response.StatusCode = http.StatusNotFound
+		return
+	}
+
 	response := map[string]interface{}{
 		"location":   "/user/" + final.ID,
 		"username":   final.Username,
