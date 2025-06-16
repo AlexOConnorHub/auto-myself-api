@@ -1,0 +1,6 @@
+services:
+  migrate:
+    image: migrate/migrate
+    volumes:
+      - ./migrations:/migrations
+    command: ["-path=/migrations", "-database=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable&search_path=public", "up"]
