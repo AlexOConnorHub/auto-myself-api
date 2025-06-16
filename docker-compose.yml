@@ -7,7 +7,7 @@ services:
       - postgres
       # - redis
     environment:
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/appdb?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable
     volumes:
       - .:/app
     develop:
@@ -17,11 +17,11 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: appdb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -29,15 +29,6 @@ services:
   #   image: redis:7
   #   ports:
   #     - "6379:6379"
-
-  migrate:
-      image: migrate/migrate
-      environment:
-        - DATABASE_URL=postgres://postgres:password@localhost:5432/appdb?sslmode=disable&search_path=public
-      volumes:
-        - ./migrations:/migrations
-      depends_on:
-        - postgres
 
   cloudbeaver:
     image: dbeaver/cloudbeaver:latest

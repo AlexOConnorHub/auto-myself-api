@@ -109,6 +109,11 @@ paths:
       responses:
         '200':
           description: Successful operation
+          headers:
+            X-Encryption-Key:
+              schema:
+                type: string
+                example: '<key>'
           content:
             application/json:
               schema:
@@ -212,6 +217,11 @@ paths:
       responses:
         '200':
           description: successful operation
+          headers:
+            X-Encryption-Key:
+              schema:
+                type: string
+                example: '<key>'
           content:
             application/json:
               schema:

@@ -5,11 +5,13 @@ import (
 )
 
 type User struct {
-	ID        string `gorm:"type:uuid;primaryKey"`
-	Username  string `gorm:"type:text;"`
-	CreatedAt string `gorm:"type:timestamptz;default:now()"`
-	UpdatedAt string `gorm:"type:timestamptz;default:now()"`
-	DeletedAt string `gorm:"type:timestamptz"`
+	ID         string `gorm:"type:uuid;primaryKey"`
+	Username   string `gorm:"type:text;"`
+	CreatedAt  string `gorm:"type:timestamptz;default:now()"`
+	UpdatedAt  string `gorm:"type:timestamptz;default:now()"`
+	DeletedAt  string `gorm:"type:timestamptz"`
+	PublicKey  string `gorm:"type:text;"`
+	PrivateKey string `gorm:"type:text;"`
 }
 
 func (User) TableName() string {

@@ -19,8 +19,8 @@ func (MaintenanceRecord) TableName() string {
 	return "maintenance_records"
 }
 
-func (u *User) BeforeCreate() error {
+func (m *MaintenanceRecord) BeforeCreate() error {
 	// Generate a new UUID for the user ID
-	u.ID = uuidv7.New().String()
+	m.ID = uuidv7.New().String()
 	return nil
 }
