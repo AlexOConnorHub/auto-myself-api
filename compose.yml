@@ -34,14 +34,10 @@ services:
   #   image: redis:7
   #   ports:
   #     - "6379:6379"
-
-  cloudbeaver:
-    image: dbeaver/cloudbeaver:latest
-    ports:
-      - 8081:8978
+  migrate:
+    image: migrate/migrate
     volumes:
-      - cloudbeaver:/opt/cloudbeaver/workspace
-    # restart: unless-stopped
+      - ./migrations:/migrations
 volumes:
   pgdata:
   cloudbeaver:
