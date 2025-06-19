@@ -1,0 +1,3 @@
+#!/bin/bash
+source .env
+docker compose run migrate -path=/migrations/seed -database=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable\&search_path=public\&x-migrations-table=_seed_migrations ${@:-up}

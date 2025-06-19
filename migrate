@@ -1,2 +1,3 @@
 #!/bin/bash
-docker compose -f migrate.yaml up migrate
+source .env
+docker compose run migrate -path=/migrations/schema -database=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable\&search_path=public\&x-migrations-table=_schema_migrations ${@:-up}
