@@ -1,12 +1,12 @@
 INSERT INTO "users" ("id", "username") VALUES
-('019785fe-4eb4-766e-9c45-bec7780972a2', 'user1'), -- Main test user: One personal car, one car to share
-('019785fe-4eb4-766e-9c45-c1f83e7c1f1f', 'user2'), -- Car shared from user1 with write access
-('019785fe-4eb4-766e-9c45-c497f2d9fe9e', 'user3'), -- Car shared from user1 with read access
-('019785fe-4eb4-766e-9c45-c8578456b4df', 'user4'), -- Has one personal car
-('019785fe-4eb4-766e-9c45-cec136a9ad6f', 'user5'), -- Has no cars, no car shared
-('019785fe-4eb4-766e-9c45-f592a1187d0c', 'user6'), -- Has car to share
-('019785fe-4eb4-766e-9c45-f9cd4ee5c0b3', 'user7'), -- Car shared from user1 and user6, both write
-('019785fe-4eb4-766e-9c45-fc6ed4a7407b', 'user8'); -- Has personal car, car shared from user1 (write) and user6 (read)
+('019785fe-4eb4-766e-9c45-bec7780972a2', 'User 1'), -- Main test user: One personal car, one car to share
+('019785fe-4eb4-766e-9c45-c1f83e7c1f1f', 'User 2'), -- Car shared from user1 with write access
+('019785fe-4eb4-766e-9c45-c497f2d9fe9e', 'User 3'), -- Car shared from user1 with read access
+('019785fe-4eb4-766e-9c45-c8578456b4df', 'User 4'), -- Has one personal car
+('019785fe-4eb4-766e-9c45-cec136a9ad6f', 'User 5'), -- Has no cars, no car shared
+('019785fe-4eb4-766e-9c45-f592a1187d0c', 'User 6'), -- Has car to share
+('019785fe-4eb4-766e-9c45-f9cd4ee5c0b3', 'User 7'), -- Car shared from user1 and user6, both write
+('019785fe-4eb4-766e-9c45-fc6ed4a7407b', 'User 8'); -- Has personal car, car shared from user1 (write) and user6 (read)
 
 INSERT INTO "cars" ("id", "nickname", "year", "make", "make_id", "model", "model_id", "vin", "lpn", "created_by") VALUES
 ('019785fe-4eb4-766e-9c45-d0b2bb289b82', 'Car 1', 2015, 'MAZDA', 473, 'MX-5', 2072, 'VIN CAR 1', 'LPN CAR 1', '019785fe-4eb4-766e-9c45-bec7780972a2'), -- User 1 personal car
