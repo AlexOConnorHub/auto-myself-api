@@ -1,13 +1,17 @@
 package routes
 
 import (
-	"auto-myself-server/controllers"
+	"auto-myself-api/controllers"
+	"auto-myself-api/middleware"
 
 	"github.com/fufuok/favicon"
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRoutes(r *gin.Engine) {
+	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.UserIDHeaderMiddleware())
+
 	r.Use(favicon.New(favicon.Config{
 		File: "favicon.ico",
 	}))
@@ -22,15 +26,15 @@ func SetupRoutes(r *gin.Engine) {
 	{
 		user := private.Group("/user")
 		{
-			user.GET("/", controllers.GetCurrentUser)
-			user.PATCH("/", controllers.UpdateCurrentUser)
-			user.DELETE("/", controllers.DeleteCurrentUser)
+			user.GET("", controllers.GetCurrentUser)
+			user.PATCH("", controllers.UpdateCurrentUser)
+			user.DELETE("", controllers.DeleteCurrentUser)
 			user.GET("/:uuid", controllers.GetUserById)
 		}
 
 		vehicle := private.Group("/vehicle")
 		{
-			vehicle.POST("/", controllers.CreateVehicle)
+			vehicle.POST("", controllers.CreateVehicle)
 			vehicle.GET("/all", controllers.GetAllVehicles)
 			vehicle.GET("/:uuid", controllers.GetVehicle)
 			vehicle.PATCH("/:uuid", controllers.UpdateVehicle)
@@ -39,7 +43,7 @@ func SetupRoutes(r *gin.Engine) {
 
 		maintenance := private.Group("/maintenance")
 		{
-			maintenance.POST("/", controllers.CreateMaintenance)
+			maintenance.POST("", controllers.CreateMaintenance)
 			maintenance.GET("/:uuid", controllers.GetMaintenance)
 			maintenance.PATCH("/:uuid", controllers.UpdateMaintenance)
 			maintenance.DELETE("/:uuid", controllers.DeleteMaintenance)
