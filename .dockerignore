@@ -1,4 +1,3 @@
-swagger.yaml
 migrate
+seed
 migrations/*
-migrate.yml

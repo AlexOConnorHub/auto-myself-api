@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
@@ -25,4 +26,9 @@ func Init() {
 	}
 
 	DB = db
+}
+
+func LogError(err error) {
+	_, file, line, _ := runtime.Caller(1)
+	fmt.Printf("%s:%d: Database error: %s\n", file, line, err.Error())
 }

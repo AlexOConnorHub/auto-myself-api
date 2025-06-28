@@ -12,31 +12,31 @@ END;
 $$ language 'plpgsql';;
 
 -- tables
--- Table: car_user_access
-CREATE TABLE "car_user_access" (
+-- Table: vehicle_user_access
+CREATE TABLE "vehicle_user_access" (
     "id" uuid  NOT NULL,
     "user_id" uuid  NOT NULL,
-    "car_id" uuid  NOT NULL,
+    "vehicle_id" uuid  NOT NULL,
     "write_access" boolean  NOT NULL DEFAULT false,
     "created_by" uuid  NOT NULL,
     "created_at" timestamptz  NOT NULL DEFAULT now(),
     "updated_at" timestamptz  NOT NULL DEFAULT now(),
     "deleted_at" timestamptz  NULL,
-    CONSTRAINT "car_user_access_pk" PRIMARY KEY ("id")
+    CONSTRAINT "vehicle_user_access_pk" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "permissions_idx_1" on "car_user_access" ("car_id" ASC);
+CREATE INDEX "permissions_idx_1" on "vehicle_user_access" ("vehicle_id" ASC);
 
-CREATE INDEX "permissions_idx_2" on "car_user_access" ("user_id" ASC);
+CREATE INDEX "permissions_idx_2" on "vehicle_user_access" ("user_id" ASC);
 
-CREATE INDEX "permissions_idx_3" on "car_user_access" ("created_by" ASC);
+CREATE INDEX "permissions_idx_3" on "vehicle_user_access" ("created_by" ASC);
 
 CREATE TRIGGER update_permissions_updated_at
-   BEFORE UPDATE ON "car_user_access"
+   BEFORE UPDATE ON "vehicle_user_access"
    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();;
 
--- Table: cars
-CREATE TABLE "cars" (
+-- Table: vehicles
+CREATE TABLE "vehicles" (
     "id" uuid  NOT NULL,
     "make" text  NULL,
     "make_id" integer  NULL,
@@ -53,10 +53,10 @@ CREATE TABLE "cars" (
     CONSTRAINT "id" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "cars_idx_1" on "cars" ("created_by" ASC);
+CREATE INDEX "vehicles_idx_1" on "vehicles" ("created_by" ASC);
 
-CREATE TRIGGER update_cars_updated_at
-    BEFORE UPDATE ON "cars"
+CREATE TRIGGER update_vehicles_updated_at
+    BEFORE UPDATE ON "vehicles"
    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();;
 
 -- Table: deleted
@@ -73,7 +73,7 @@ CREATE INDEX "deleted_idx_1" on "deleted" ("source_table" ASC,"source_id" ASC);
 -- Table: maintenance_records
 CREATE TABLE "maintenance_records" (
     "id" uuid  NOT NULL,
-    "car_id" uuid  NOT NULL,
+    "vehicle_id" uuid  NOT NULL,
     "odometer" integer  NULL,
     "timestamp" date  NULL,
     "notes" text  NULL,
@@ -87,7 +87,7 @@ CREATE TABLE "maintenance_records" (
     CONSTRAINT "maintenance_records_pk" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "maintainance_records_idx_1" on "maintenance_records" ("car_id" ASC);
+CREATE INDEX "maintainance_records_idx_1" on "maintenance_records" ("vehicle_id" ASC);
 
 CREATE INDEX "maintenance_records_idx_2" on "maintenance_records" ("created_by" ASC);
 
@@ -110,17 +110,17 @@ CREATE TRIGGER update_users_updated_at
    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();;
 
 -- foreign keys
--- Reference: cars_permissions (table: car_user_access)
-ALTER TABLE "car_user_access" ADD CONSTRAINT "cars_permissions"
-    FOREIGN KEY ("car_id")
-    REFERENCES "cars" ("id")
+-- Reference: vehicles_permissions (table: vehicle_user_access)
+ALTER TABLE "vehicle_user_access" ADD CONSTRAINT "vehicles_permissions"
+    FOREIGN KEY ("vehicle_id")
+    REFERENCES "vehicles" ("id")
     ON DELETE  CASCADE  
     NOT DEFERRABLE 
     INITIALLY IMMEDIATE
 ;
 
--- Reference: cars_users (table: cars)
-ALTER TABLE "cars" ADD CONSTRAINT "cars_users"
+-- Reference: vehicles_users (table: vehicles)
+ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_users"
     FOREIGN KEY ("created_by")
     REFERENCES "users" ("id")
     ON DELETE  CASCADE  
@@ -128,10 +128,10 @@ ALTER TABLE "cars" ADD CONSTRAINT "cars_users"
     INITIALLY IMMEDIATE
 ;
 
--- Reference: maintainance_records_cars (table: maintenance_records)
-ALTER TABLE "maintenance_records" ADD CONSTRAINT "maintainance_records_cars"
-    FOREIGN KEY ("car_id")
-    REFERENCES "cars" ("id")
+-- Reference: maintainance_records_vehicles (table: maintenance_records)
+ALTER TABLE "maintenance_records" ADD CONSTRAINT "maintainance_records_vehicles"
+    FOREIGN KEY ("vehicle_id")
+    REFERENCES "vehicles" ("id")
     ON DELETE  CASCADE  
     NOT DEFERRABLE 
     INITIALLY IMMEDIATE
@@ -145,8 +145,8 @@ ALTER TABLE "maintenance_records" ADD CONSTRAINT "maintenance_records_users"
     INITIALLY IMMEDIATE
 ;
 
--- Reference: permissions_users (table: car_user_access)
-ALTER TABLE "car_user_access" ADD CONSTRAINT "permissions_users"
+-- Reference: permissions_users (table: vehicle_user_access)
+ALTER TABLE "vehicle_user_access" ADD CONSTRAINT "permissions_users"
     FOREIGN KEY ("user_id")
     REFERENCES "users" ("id")
     ON DELETE  CASCADE  
@@ -154,8 +154,8 @@ ALTER TABLE "car_user_access" ADD CONSTRAINT "permissions_users"
     INITIALLY IMMEDIATE
 ;
 
--- Reference: permissions_users_created (table: car_user_access)
-ALTER TABLE "car_user_access" ADD CONSTRAINT "permissions_users_created"
+-- Reference: permissions_users_created (table: vehicle_user_access)
+ALTER TABLE "vehicle_user_access" ADD CONSTRAINT "permissions_users_created"
     FOREIGN KEY ("created_by")
     REFERENCES "users" ("id")
     ON DELETE  CASCADE  
