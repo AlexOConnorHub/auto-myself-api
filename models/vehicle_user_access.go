@@ -27,7 +27,7 @@ func (VehicleUserAccess) TableName() string {
 
 func (vua *VehicleUserAccess) BeforeCreate(tx *gorm.DB) (err error) {
 	if vua.ID.IsNil() {
-		vua.ID, err = uuid.NewV7()
+		vua.DatabaseMetadata.ID, err = uuid.NewV7()
 	}
 	return err
 }

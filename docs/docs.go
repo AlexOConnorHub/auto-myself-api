@@ -15,6 +15,38 @@ const docTemplate = `{
                     }
                 },
                 "type": "object"
+            },
+            "models.VehicleBase": {
+                "properties": {
+                    "created_by": {
+                        "type": "string"
+                    },
+                    "lpn": {
+                        "type": "string"
+                    },
+                    "make": {
+                        "type": "string"
+                    },
+                    "make_id": {
+                        "type": "integer"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "model_id": {
+                        "type": "integer"
+                    },
+                    "nickname": {
+                        "type": "string"
+                    },
+                    "vin": {
+                        "type": "string"
+                    },
+                    "year": {
+                        "type": "integer"
+                    }
+                },
+                "type": "object"
             }
         }
     },
@@ -369,17 +401,10 @@ const docTemplate = `{
                         "description": "OK"
                     },
                     "404": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
                         "description": "Not Found"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
                     }
                 },
                 "summary": "Returns user record by ID",
@@ -457,54 +482,181 @@ const docTemplate = `{
                             }
                         },
                         "description": "OK"
-                    },
-                    "400": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
-                        "description": "Bad Request"
-                    },
-                    "404": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
-                        "description": "Not Found"
-                    },
-                    "422": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
-                        "description": "Unprocessable Entity"
                     }
                 },
                 "summary": "Get all vehicles for the current user",
                 "tags": [
                     "Vehicles"
                 ]
+            },
+            "post": {
+                "description": "Create a vehicle.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "examples": {
+                                "vehicle1": {
+                                    "description": "Create a new vehicle with nickname \"A Fresh Vehicle\"",
+                                    "summary": "Create a Vehicle",
+                                    "value": "{ \"nickname\": \"A Fresh Vehicle\" }"
+                                }
+                            },
+                            "schema": {
+                                "$ref": "#/components/schemas/models.VehicleBase"
+                            }
+                        }
+                    },
+                    "description": "New Vehicle",
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created"
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity"
+                    }
+                },
+                "summary": "Create vehicle TODO: ADD HEADER",
+                "tags": [
+                    "Vehicles"
+                ]
             }
         },
         "/vehicle/{uuid}": {
+            "delete": {
+                "description": "Delete a vehicle.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Vehicle UUID",
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    }
+                },
+                "summary": "Delete vehicle",
+                "tags": [
+                    "Vehicles"
+                ]
+            },
             "get": {
                 "description": "Retrieves a vehicle by its UUID.",
                 "parameters": [
@@ -601,56 +753,114 @@ const docTemplate = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "items": {
-                                        "type": "string"
-                                    },
-                                    "type": "array"
+                                    "$ref": "#/components/schemas/models.VehicleBase"
                                 }
                             }
                         },
                         "description": "OK"
                     },
-                    "400": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
-                        "description": "Bad Request"
-                    },
                     "404": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
                         "description": "Not Found"
-                    },
-                    "422": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        },
-                        "description": "Unprocessable Entity"
                     }
                 },
                 "summary": "Get vehicle",
+                "tags": [
+                    "Vehicles"
+                ]
+            },
+            "patch": {
+                "description": "Update a vehicle by its UUID.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Vehicle UUID",
+                        "examples": {
+                            "vehicle2": {
+                                "description": "Vehicle shared by User 1 with User 2 (write access) and User 3",
+                                "summary": "Vehicle 2",
+                                "value": "019785fe-4eb4-766e-9c45-d77f41aa8317"
+                            }
+                        },
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "examples": {
+                                "vehcile_modify": {
+                                    "description": "Set nickname to \"Modified Vehicle 2\"",
+                                    "summary": "Modify vehicle",
+                                    "value": "{ \"nickname\": \"Modified Vehicle 2\" }"
+                                },
+                                "vehcile_reset": {
+                                    "description": "Reset vehcile to original state",
+                                    "summary": "Reset Vehicle",
+                                    "value": "{ \"Nickname\": \"Vehicle 2\" }"
+                                }
+                            },
+                            "schema": {
+                                "$ref": "#/components/schemas/models.VehicleBase"
+                            }
+                        }
+                    },
+                    "description": "Vehicle object",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/models.VehicleBase"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    }
+                },
+                "summary": "Update vehicle",
                 "tags": [
                     "Vehicles"
                 ]
