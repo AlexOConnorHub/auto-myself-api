@@ -14,9 +14,6 @@ import (
 // @Tags Vehicles
 // @Produce json
 // @Success 200 {object} []string
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 422 {object} map[string]string
 // @Param auth_uuid header string true "User ID"
 // @Param.examples auth_uuid user1 summary User 1
 // @Param.examples auth_uuid user1 description User has One personal vehicle and one shared vehicle
@@ -67,10 +64,8 @@ func GetAllVehicles(c *gin.Context) {
 // @Description Retrieves a vehicle by its UUID.
 // @Tags Vehicles
 // @Produce json
-// @Success 200 {object} []string
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 422 {object} map[string]string
+// @Success 200 {object} models.VehicleBase
+// @Failure 404
 // @Param auth_uuid header string true "User ID"
 // @Param.examples auth_uuid user1 summary User 1
 // @Param.examples auth_uuid user1 description User has One personal vehicle and one shared vehicle
@@ -119,7 +114,7 @@ func GetVehicleByID(c *gin.Context) {
 	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
 
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid UUID format"})
+		c.Status(http.StatusNotFound)
 		return
 	}
 
@@ -129,42 +124,223 @@ func GetVehicleByID(c *gin.Context) {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		c.Status(http.StatusNotFound)
 		return
 	}
 
 	if !vehicle.CanRead(user) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		c.Status(http.StatusNotFound)
 		return
 	}
 
 	c.JSON(http.StatusOK, vehicle.VehicleBase)
 }
 
+// @Summary Create vehicle TODO: ADD HEADER
+// @Description Create a vehicle.
+// @Tags Vehicles
+// @Success 201
+// @Failure 422
+// @Param auth_uuid header string true "User ID"
+// @Param.examples auth_uuid user1 summary User 1
+// @Param.examples auth_uuid user1 description User has One personal vehicle and one shared vehicle
+// @Param.examples auth_uuid user1 value 019785fe-4eb4-766e-9c45-bec7780972a2
+// @Param.examples auth_uuid user2 summary User 2
+// @Param.examples auth_uuid user2 description User has vehicle shared FROM User 1 with write access
+// @Param.examples auth_uuid user2 value 019785fe-4eb4-766e-9c45-c1f83e7c1f1f
+// @Param.examples auth_uuid user3 summary User 3
+// @Param.examples auth_uuid user3 description User has vehicle shared FROM User 1 with read access
+// @Param.examples auth_uuid user3 value 019785fe-4eb4-766e-9c45-c497f2d9fe9e
+// @Param.examples auth_uuid user4 summary User 4
+// @Param.examples auth_uuid user4 description User has One personal vehicle
+// @Param.examples auth_uuid user4 value 019785fe-4eb4-766e-9c45-c8578456b4df
+// @Param.examples auth_uuid user5 summary User 5
+// @Param.examples auth_uuid user5 description User has no vehicles, no vehicles shared
+// @Param.examples auth_uuid user5 value 019785fe-4eb4-766e-9c45-cec136a9ad6f
+// @Param.examples auth_uuid user6 summary User 6
+// @Param.examples auth_uuid user6 description User has One vehicle to share
+// @Param.examples auth_uuid user6 value 019785fe-4eb4-766e-9c45-f592a1187d0c
+// @Param.examples auth_uuid user7 summary User 7
+// @Param.examples auth_uuid user7 description User has vehicle shared FROM User 1 and User 6, both with write access
+// @Param.examples auth_uuid user7 value 019785fe-4eb4-766e-9c45-f9cd4ee5c0b3
+// @Param.examples auth_uuid user8 summary User 8
+// @Param.examples auth_uuid user8 description User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)
+// @Param.examples auth_uuid user8 value 019785fe-4eb4-766e-9c45-fc6ed4a7407b
+// @Param vehicle body models.VehicleBase true "New Vehicle"
+// @Param.examples vehicle vehicle1 summary Create a Vehicle
+// @Param.examples vehicle vehicle1 description Create a new vehicle with nickname "A Fresh Vehicle"
+// @Param.examples vehicle vehicle1 value { "nickname": "A Fresh Vehicle" }
+// @Router /vehicle [post]
 func CreateVehicle(c *gin.Context) {
-	c.JSON(http.StatusCreated, gin.H{"message": "Create a vehicle"})
+	var user = c.MustGet("user").(models.User)
+
+	var newVehicle models.Vehicle
+	if err := c.ShouldBindJSON(&newVehicle.VehicleBase); err != nil {
+		c.Status(http.StatusUnprocessableEntity)
+		return
+	}
+
+	newVehicle.VehicleBase.CreatedBy = user.ID
+
+	if err := database.DB.Create(&newVehicle).Error; err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	c.Header("X-Object-Location", newVehicle.GetLocation())
+	c.Status(http.StatusCreated)
 }
 
+// @Summary Delete vehicle
+// @Description Delete a vehicle.
+// @Tags Vehicles
+// @Success 204
+// @Failure 403
+// @Failure 404
+// @Param auth_uuid header string true "User ID"
+// @Param.examples auth_uuid user1 summary User 1
+// @Param.examples auth_uuid user1 description User has One personal vehicle and one shared vehicle
+// @Param.examples auth_uuid user1 value 019785fe-4eb4-766e-9c45-bec7780972a2
+// @Param.examples auth_uuid user2 summary User 2
+// @Param.examples auth_uuid user2 description User has vehicle shared FROM User 1 with write access
+// @Param.examples auth_uuid user2 value 019785fe-4eb4-766e-9c45-c1f83e7c1f1f
+// @Param.examples auth_uuid user3 summary User 3
+// @Param.examples auth_uuid user3 description User has vehicle shared FROM User 1 with read access
+// @Param.examples auth_uuid user3 value 019785fe-4eb4-766e-9c45-c497f2d9fe9e
+// @Param.examples auth_uuid user4 summary User 4
+// @Param.examples auth_uuid user4 description User has One personal vehicle
+// @Param.examples auth_uuid user4 value 019785fe-4eb4-766e-9c45-c8578456b4df
+// @Param.examples auth_uuid user5 summary User 5
+// @Param.examples auth_uuid user5 description User has no vehicles, no vehicles shared
+// @Param.examples auth_uuid user5 value 019785fe-4eb4-766e-9c45-cec136a9ad6f
+// @Param.examples auth_uuid user6 summary User 6
+// @Param.examples auth_uuid user6 description User has One vehicle to share
+// @Param.examples auth_uuid user6 value 019785fe-4eb4-766e-9c45-f592a1187d0c
+// @Param.examples auth_uuid user7 summary User 7
+// @Param.examples auth_uuid user7 description User has vehicle shared FROM User 1 and User 6, both with write access
+// @Param.examples auth_uuid user7 value 019785fe-4eb4-766e-9c45-f9cd4ee5c0b3
+// @Param.examples auth_uuid user8 summary User 8
+// @Param.examples auth_uuid user8 description User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)
+// @Param.examples auth_uuid user8 value 019785fe-4eb4-766e-9c45-fc6ed4a7407b
+// @Param uuid path string true "Vehicle UUID"
+// @Router /vehicle/{uuid} [delete]
 func DeleteVehicle(c *gin.Context) {
-	c.JSON(http.StatusCreated, gin.H{"message": "Delete a vehicle"})
+	var user = c.MustGet("user").(models.User)
+
+	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
+
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	var vehicle models.Vehicle
+	err = database.DB.Where("id = ?", vehiceUUID).First(&vehicle).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			database.LogError(err)
+			c.Status(http.StatusInternalServerError)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+		return
+	}
+
+	if vehicle.CreatedBy != user.ID {
+		if vehicle.CanRead(user) {
+			c.Status(http.StatusForbidden)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+		return
+	}
+
+	if err := database.DB.Delete(&vehicle).Error; err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
+// @Summary Update vehicle
+// @Description Update a vehicle by its UUID.
+// @Tags Vehicles
+// @Produce json
+// @Success 200 {object} models.VehicleBase
+// @Failure 403
+// @Failure 404
+// @Param auth_uuid header string true "User ID"
+// @Param.examples auth_uuid user1 summary User 1
+// @Param.examples auth_uuid user1 description User has One personal vehicle and one shared vehicle
+// @Param.examples auth_uuid user1 value 019785fe-4eb4-766e-9c45-bec7780972a2
+// @Param.examples auth_uuid user2 summary User 2
+// @Param.examples auth_uuid user2 description User has vehicle shared FROM User 1 with write access
+// @Param.examples auth_uuid user2 value 019785fe-4eb4-766e-9c45-c1f83e7c1f1f
+// @Param.examples auth_uuid user3 summary User 3
+// @Param.examples auth_uuid user3 description User has vehicle shared FROM User 1 with read access
+// @Param.examples auth_uuid user3 value 019785fe-4eb4-766e-9c45-c497f2d9fe9e
+// @Param.examples auth_uuid user4 summary User 4
+// @Param.examples auth_uuid user4 description User has One personal vehicle
+// @Param.examples auth_uuid user4 value 019785fe-4eb4-766e-9c45-c8578456b4df
+// @Param uuid path string true "Vehicle UUID"
+// @Param.examples uuid vehicle2 summary Vehicle 2
+// @Param.examples uuid vehicle2 description Vehicle shared by User 1 with User 2 (write access) and User 3
+// @Param.examples uuid vehicle2 value 019785fe-4eb4-766e-9c45-d77f41aa8317
+// @Param user body models.VehicleBase true "Vehicle object"
+// @Param.examples user vehcile_modify summary Modify vehicle
+// @Param.examples user vehcile_modify description Set nickname to "Modified Vehicle 2"
+// @Param.examples user vehcile_modify value { "nickname": "Modified Vehicle 2" }
+// @Param.examples user vehcile_reset summary Reset Vehicle
+// @Param.examples user vehcile_reset description Reset vehcile to original state
+// @Param.examples user vehcile_reset value { "Nickname": "Vehicle 2" }
+// @Router /vehicle/{uuid} [patch]
 func UpdateVehicle(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Update a vehicle"})
-	// uuid := c.Param("uuid")
+	var user = c.MustGet("user").(models.User)
 
-	// var requestData struct {
-	// 	Color string `json:"color"`
-	// 	Miles int    `json:"miles"`
-	// }
+	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
 
-	// if err := c.BindJSON(&requestData); err != nil {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
-	// 	return
-	// }
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
 
-	// c.JSON(http.StatusOK, gin.H{
-	// 	"uuid":    uuid,
-	// 	"updated": requestData,
-	// })
+	vehicle := models.Vehicle{
+		DatabaseMetadata: models.DatabaseMetadata{
+			ID: vehiceUUID,
+		},
+	}
+
+	err = database.DB.Where("id = ?", vehiceUUID).First(&vehicle).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			database.LogError(err)
+			c.Status(http.StatusInternalServerError)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+		return
+	}
+
+	if !vehicle.CanWrite(user) {
+		if vehicle.CanRead(user) {
+			c.Status(http.StatusForbidden)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+		return
+	}
+
+	if err := c.ShouldBindJSON(&vehicle.VehicleBase); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	if err := database.DB.Save(&vehicle).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update vehicle"})
+		return
+	}
+
+	c.Header("Location", "/vehicle/"+vehicle.ID.String())
+	c.JSON(http.StatusOK, vehicle.VehicleBase)
 }

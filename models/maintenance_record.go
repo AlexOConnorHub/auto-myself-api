@@ -31,7 +31,7 @@ func (MaintenanceRecord) TableName() string {
 
 func (m *MaintenanceRecord) BeforeCreate(tx *gorm.DB) (err error) {
 	if m.ID.IsNil() {
-		m.ID, err = uuid.NewV7()
+		m.DatabaseMetadata.ID, err = uuid.NewV7()
 	}
 	return err
 }

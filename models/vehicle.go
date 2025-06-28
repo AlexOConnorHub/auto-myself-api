@@ -31,12 +31,12 @@ func (Vehicle) TableName() string {
 }
 
 func (v *Vehicle) GetLocation() string {
-	return "/vehicle/" + v.ID.String()
+	return "/vehicle/" + v.DatabaseMetadata.ID.String()
 }
 
 func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
-	if !v.ID.IsNil() {
-		v.ID, err = uuid.NewV7()
+	if v.ID.IsNil() {
+		v.DatabaseMetadata.ID, err = uuid.NewV7()
 	}
 	return err
 }
@@ -66,6 +66,7 @@ func (v *Vehicle) CanRead(user User) bool {
 }
 
 func (v *Vehicle) CanWrite(user User) bool {
+	println("Checking write access for user:", user.ID.String(), "on vehicle:", v.ID.String(), " (Which was created by ", v.CreatedBy.String(), ")")
 	if v.CreatedBy == user.ID {
 		return true
 	}

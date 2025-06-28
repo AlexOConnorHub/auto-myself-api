@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // @Summary Returns user record by ID
@@ -13,7 +14,8 @@ import (
 // @Tags Users
 // @Produce json
 // @Success 200 {object} models.UserBase
-// @Failure 404 {object} map[string]string
+// @Failure 404
+// @Failure 500
 // @Param auth_uuid header string true "User ID"
 // @Param.examples auth_uuid user1 summary User 1
 // @Param.examples auth_uuid user1 description User has One personal vehicle and one shared vehicle
@@ -68,8 +70,24 @@ import (
 func GetUserByID(c *gin.Context) {
 	user := c.MustGet("user").(models.User)
 
-	c.Header("Location", "/user/"+user.ID.String())
-	c.JSON(http.StatusOK, user.UserBase)
+	var requestedUser models.User
+	if err := database.DB.Where("id = ?", c.Param("uuid")).First(&requestedUser).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			database.LogError(err)
+			c.Status(http.StatusInternalServerError)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+		return
+	}
+
+	if !user.CanRead(requestedUser) {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	c.Header("Location", "/user/"+requestedUser.ID.String())
+	c.JSON(http.StatusOK, requestedUser.UserBase)
 }
 
 // @Summary Modify current user's record
@@ -101,7 +119,8 @@ func UpdateCurrentUser(c *gin.Context) {
 	}
 
 	if err := database.DB.Save(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
+		database.LogError(err)
+		c.Status(http.StatusInternalServerError)
 		return
 	}
 
