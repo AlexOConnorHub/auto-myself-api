@@ -1,16 +1,19 @@
 package models
 
 import (
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 )
 
 type UserBase struct {
-	Username string `gorm:"type:text;" json:"username"`
+	Username string `json:"username" gorm:"type:text;"`
 }
 
 type User struct {
 	DatabaseMetadata
 	UserBase
+	OwnedVehicles    []Vehicle           `gorm:"foreignKey:CreatedBy;references:ID;constraint"`
+	AccessedVehicles []VehicleUserAccess `gorm:"foreignKey:UserID;references:ID;constraint"`
 }
 
 func (User) TableName() string {
@@ -18,10 +21,8 @@ func (User) TableName() string {
 }
 
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
-	err = BeforeCreateSetupDatabaseMetadata(&u.DatabaseMetadata)
-	if err != nil {
-		return err
+	if u.ID.IsNil() {
+		u.ID, err = uuid.NewV7()
 	}
-
-	return
+	return err
 }

@@ -8,26 +8,6 @@ const docTemplate = `{
     "schemes": {{ marshal .Schemes }},
     "components": {
         "schemas": {
-            "models.User": {
-                "properties": {
-                    "created_at": {
-                        "type": "string"
-                    },
-                    "deleted_at": {
-                        "type": "string"
-                    },
-                    "id": {
-                        "type": "string"
-                    },
-                    "updated_at": {
-                        "type": "string"
-                    },
-                    "username": {
-                        "type": "string"
-                    }
-                },
-                "type": "object"
-            },
             "models.UserBase": {
                 "properties": {
                     "username": {
@@ -59,6 +39,117 @@ const docTemplate = `{
     },
     "paths": {
         "/user": {
+            "get": {
+                "description": "Useful for getting the current user's information",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/models.UserBase"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "422": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Unprocessable Entity"
+                    }
+                },
+                "summary": "Get current user's record",
+                "tags": [
+                    "Users"
+                ]
+            },
             "patch": {
                 "description": "Useful for modifying the user's username",
                 "parameters": [
@@ -72,7 +163,7 @@ const docTemplate = `{
                             }
                         },
                         "in": "header",
-                        "name": "uuid",
+                        "name": "auth_uuid",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -107,11 +198,24 @@ const docTemplate = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/models.User"
+                                    "$ref": "#/components/schemas/models.UserBase"
                                 }
                             }
                         },
                         "description": "OK"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
                     },
                     "404": {
                         "content": {
@@ -125,6 +229,19 @@ const docTemplate = `{
                             }
                         },
                         "description": "Not Found"
+                    },
+                    "422": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Unprocessable Entity"
                     }
                 },
                 "summary": "Modify current user's record",
@@ -137,6 +254,57 @@ const docTemplate = `{
             "get": {
                 "description": "Useful for finding a user's username",
                 "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     {
                         "description": "User ID",
                         "examples": {
@@ -194,7 +362,7 @@ const docTemplate = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/models.User"
+                                    "$ref": "#/components/schemas/models.UserBase"
                                 }
                             }
                         },
@@ -217,6 +385,274 @@ const docTemplate = `{
                 "summary": "Returns user record by ID",
                 "tags": [
                     "Users"
+                ]
+            }
+        },
+        "/vehicle": {
+            "get": {
+                "description": "Returns a list of all vehicle's locations associated with the current user.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "422": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Unprocessable Entity"
+                    }
+                },
+                "summary": "Get all vehicles for the current user",
+                "tags": [
+                    "Vehicles"
+                ]
+            }
+        },
+        "/vehicle/{uuid}": {
+            "get": {
+                "description": "Retrieves a vehicle by its UUID.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Vehicle UUID",
+                        "examples": {
+                            "vehicle1": {
+                                "description": "Vehicle owned by User 1",
+                                "summary": "Vehicle 1",
+                                "value": "019785fe-4eb4-766e-9c45-d0b2bb289b82"
+                            },
+                            "vehicle2": {
+                                "description": "Vehicle shared by User 1 with User 2",
+                                "summary": "Vehicle 2",
+                                "value": "019785fe-4eb4-766e-9c45-d77f41aa8317"
+                            },
+                            "vehicle3": {
+                                "description": "Vehicle owned by User 4",
+                                "summary": "Vehicle 3",
+                                "value": "019785fe-4eb4-766e-9c45-d9cc7ea628c1"
+                            },
+                            "vehicle4": {
+                                "description": "Vehicle shared by User 6 with User 7",
+                                "summary": "Vehicle 4",
+                                "value": "019785fe-4eb4-766e-9c45-ddfb4b2e7210"
+                            },
+                            "vehicle5": {
+                                "description": "Vehicle owned by User 8",
+                                "summary": "Vehicle 5",
+                                "value": "019785fe-4eb4-766e-9c45-e1af5010246b"
+                            }
+                        },
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "422": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "Unprocessable Entity"
+                    }
+                },
+                "summary": "Get vehicle",
+                "tags": [
+                    "Vehicles"
                 ]
             }
         }

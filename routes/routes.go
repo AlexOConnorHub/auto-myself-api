@@ -28,15 +28,15 @@ func SetupRoutes(r *gin.Engine) {
 		{
 			user.GET("", controllers.GetCurrentUser)
 			user.PATCH("", controllers.UpdateCurrentUser)
-			user.DELETE("", controllers.DeleteCurrentUser)
-			user.GET("/:uuid", controllers.GetUserById)
+			// user.DELETE("", controllers.DeleteCurrentUser)
+			user.GET("/:uuid", controllers.GetUserByID)
 		}
 
 		vehicle := private.Group("/vehicle")
 		{
 			vehicle.POST("", controllers.CreateVehicle)
-			vehicle.GET("/all", controllers.GetAllVehicles)
-			vehicle.GET("/:uuid", controllers.GetVehicle)
+			vehicle.GET("", controllers.GetAllVehicles)
+			vehicle.GET("/:uuid", controllers.GetVehicleByID)
 			vehicle.PATCH("/:uuid", controllers.UpdateVehicle)
 			vehicle.DELETE("/:uuid", controllers.DeleteVehicle)
 		}

@@ -1,17 +1,29 @@
 package models
 
 import (
-	"time"
-
 	"github.com/gofrs/uuid"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+var DB *gorm.DB
+
+func ConnectDatabase() {
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  "host=postgres user=postgres password=password dbname=appdb port=5423 sslmode=disable TimeZone=US/Eastern",
+		PreferSimpleProtocol: true, // disables implicit prepared statement usage
+	}), &gorm.Config{})
+
+	if err != nil {
+		panic("Failed to connect to database!")
+	}
+
+	DB = db
+}
+
 type DatabaseMetadata struct {
-	ID        uuid.UUID       `json:"id" gorm:"type:uuid;primaryKey;not null"`
-	CreatedAt time.Time       `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time       `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt *gorm.DeletedAt `json:"deleted_at" gorm:"index" swaggertype:"primitive,string"`
+	gorm.Model
+	ID uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
 }
 
 func ParseUUID(uuidStr string) (uuid.UUID, error) {
@@ -20,12 +32,4 @@ func ParseUUID(uuidStr string) (uuid.UUID, error) {
 		return uuid.Nil, err
 	}
 	return parsedUUID, nil
-}
-
-func BeforeCreateSetupDatabaseMetadata(d *DatabaseMetadata) (err error) {
-	d.ID, err = uuid.NewV7()
-	if err != nil {
-		return err
-	}
-	return nil
 }

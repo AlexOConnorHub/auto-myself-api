@@ -1,6 +1,6 @@
 services:
   api:
-    build: .
+    image: golang:1.24-bookworm
     ports:
       - "8080:8080"
     depends_on:
@@ -15,10 +15,14 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-appdb}
     volumes:
       - .:/app
+      - /root/.cache/go-build:/root/.cache/go-build
+      - /root/go/pkg/mod:/root/go/pkg/mod
     develop:
       watch:
-        - action: rebuild
+        - action: restart
           path: ./
+    working_dir: /app
+    entrypoint: ["go", "run", "main.go"]
   postgres:
     image: postgres:15
     environment:

@@ -1,4 +1,5 @@
 TRUNCATE "maintenance_records" CASCADE;
-TRUNCATE "car_user_access" CASCADE;
-TRUNCATE "cars" CASCADE;
+TRUNCATE "vehicle_user_access" CASCADE;
+TRUNCATE "vehicles" CASCADE;
 TRUNCATE "users" CASCADE;
+TRUNCATE "deleted" CASCADE;
