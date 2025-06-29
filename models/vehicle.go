@@ -8,20 +8,20 @@ import (
 )
 
 type VehicleBase struct {
-	Nickname  string    `json:"nickname" gorm:"type:text"`
-	Make      string    `json:"make" gorm:"type:text"`
-	MakeID    int       `json:"make_id" gorm:"type:integer"`
-	Model     string    `json:"model" gorm:"type:text"`
-	ModelID   int       `json:"model_id" gorm:"type:integer"`
-	Year      int       `json:"year" gorm:"type:integer"`
-	Vin       string    `json:"vin" gorm:"type:text"`
-	Lpn       string    `json:"lpn" gorm:"type:text"`
-	CreatedBy uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
+	Nickname string `json:"nickname" gorm:"type:text"`
+	Make     string `json:"make" gorm:"type:text"`
+	MakeID   int    `json:"make_id" gorm:"type:integer"`
+	Model    string `json:"model" gorm:"type:text"`
+	ModelID  int    `json:"model_id" gorm:"type:integer"`
+	Year     int    `json:"year" gorm:"type:integer"`
+	Vin      string `json:"vin" gorm:"type:text"`
+	Lpn      string `json:"lpn" gorm:"type:text"`
 }
 
 type Vehicle struct {
 	DatabaseMetadata
 	VehicleBase
+	CreatedBy          uuid.UUID           `json:"created_by" gorm:"type:uuid;not null"`
 	CreatedByUser      User                `gorm:"foreignKey:CreatedBy;references:ID;constraint"`
 	MaintenanceRecords []MaintenanceRecord `gorm:"foreignKey:VehicleID;references:ID;constraint"`
 }

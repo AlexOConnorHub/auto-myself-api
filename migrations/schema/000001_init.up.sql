@@ -80,6 +80,7 @@ CREATE TABLE "maintenance_records" (
     "type" text  NULL,
     "interval" integer  NULL,
     "interval_type" text  NULL,
+    "cost" text NULL,
     "created_by" uuid  NOT NULL,
     "created_at" timestamptz  NOT NULL DEFAULT now(),
     "updated_at" timestamptz  NOT NULL DEFAULT now(),

@@ -180,7 +180,7 @@ func CreateVehicle(c *gin.Context) {
 		return
 	}
 
-	newVehicle.VehicleBase.CreatedBy = user.ID
+	newVehicle.CreatedBy = user.ID
 
 	if err := database.DB.Create(&newVehicle).Error; err != nil {
 		c.Status(http.StatusInternalServerError)
@@ -224,7 +224,7 @@ func CreateVehicle(c *gin.Context) {
 // @Param.examples auth_uuid user8 value 019785fe-4eb4-766e-9c45-fc6ed4a7407b
 // @Param uuid path string true "Vehicle UUID"
 // @Router /vehicle/{uuid} [delete]
-func DeleteVehicle(c *gin.Context) {
+func DeleteVehicleByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
 	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
@@ -295,7 +295,7 @@ func DeleteVehicle(c *gin.Context) {
 // @Param.examples user vehcile_reset description Reset vehcile to original state
 // @Param.examples user vehcile_reset value { "Nickname": "Vehicle 2" }
 // @Router /vehicle/{uuid} [patch]
-func UpdateVehicle(c *gin.Context) {
+func UpdateVehicleByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
 	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
@@ -341,6 +341,5 @@ func UpdateVehicle(c *gin.Context) {
 		return
 	}
 
-	c.Header("Location", "/vehicle/"+vehicle.ID.String())
 	c.JSON(http.StatusOK, vehicle.VehicleBase)
 }
