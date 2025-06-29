@@ -37,16 +37,17 @@ func SetupRoutes(r *gin.Engine) {
 			vehicle.POST("", controllers.CreateVehicle)
 			vehicle.GET("", controllers.GetAllVehicles)
 			vehicle.GET("/:uuid", controllers.GetVehicleByID)
-			vehicle.PATCH("/:uuid", controllers.UpdateVehicle)
-			vehicle.DELETE("/:uuid", controllers.DeleteVehicle)
+			vehicle.GET("/:uuid/maintenance", controllers.GetAllMaintenance)
+			vehicle.PATCH("/:uuid", controllers.UpdateVehicleByID)
+			vehicle.DELETE("/:uuid", controllers.DeleteVehicleByID)
 		}
 
 		maintenance := private.Group("/maintenance")
 		{
 			maintenance.POST("", controllers.CreateMaintenance)
-			maintenance.GET("/:uuid", controllers.GetMaintenance)
-			maintenance.PATCH("/:uuid", controllers.UpdateMaintenance)
-			maintenance.DELETE("/:uuid", controllers.DeleteMaintenance)
+			maintenance.GET("/:uuid", controllers.GetMaintenanceByID)
+			maintenance.PATCH("/:uuid", controllers.UpdateMaintenanceByID)
+			maintenance.DELETE("/:uuid", controllers.DeleteMaintenanceByID)
 		}
 	}
 }

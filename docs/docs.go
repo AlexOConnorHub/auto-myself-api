@@ -8,6 +8,35 @@ const docTemplate = `{
     "schemes": {{ marshal .Schemes }},
     "components": {
         "schemas": {
+            "models.MaintenanceRecordBase": {
+                "properties": {
+                    "cost": {
+                        "type": "string"
+                    },
+                    "interval": {
+                        "type": "string"
+                    },
+                    "interval_type": {
+                        "type": "string"
+                    },
+                    "notes": {
+                        "type": "string"
+                    },
+                    "odometer": {
+                        "type": "integer"
+                    },
+                    "timestamp": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "vehicle_id": {
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
             "models.UserBase": {
                 "properties": {
                     "username": {
@@ -18,9 +47,6 @@ const docTemplate = `{
             },
             "models.VehicleBase": {
                 "properties": {
-                    "created_by": {
-                        "type": "string"
-                    },
                     "lpn": {
                         "type": "string"
                     },
@@ -70,6 +96,449 @@ const docTemplate = `{
         "url": ""
     },
     "paths": {
+        "/maintenance": {
+            "post": {
+                "description": "Create a new maintenance record for a vehicle.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "examples": {
+                                "maintenance_record1": {
+                                    "description": "Create a new maintenancerecord with notes \"A Fresh Vehicle\"",
+                                    "summary": "Create a maintenance record",
+                                    "value": "{ \"notes\": \"A Fresh Vehicle\" }"
+                                }
+                            },
+                            "schema": {
+                                "$ref": "#/components/schemas/models.MaintenanceRecordBase"
+                            }
+                        }
+                    },
+                    "description": "New maintenance record",
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created"
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity"
+                    }
+                },
+                "summary": "Create maintenance record TODO: ADD HEADER",
+                "tags": [
+                    "Maintenance"
+                ]
+            }
+        },
+        "/maintenance/{uuid}": {
+            "delete": {
+                "description": "Delete a maintenance record.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Vehicle UUID",
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    }
+                },
+                "summary": "Delete maintenance record",
+                "tags": [
+                    "Maintenance"
+                ]
+            },
+            "get": {
+                "description": "Retrieves a maintenance record by its UUID",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Maintenance Record UUID",
+                        "examples": {
+                            "maintenacne1": {
+                                "description": "Vehicle owned by User 1",
+                                "summary": "Maintenance 1",
+                                "value": "01978640-1148-74f8-be64-59f2af568e59"
+                            },
+                            "maintenacne10": {
+                                "description": "Vehicle shared by User 1 with User 2 and User 3",
+                                "summary": "Maintenance 10",
+                                "value": "01978640-1148-74f8-be64-7ea0e41d68d5"
+                            },
+                            "maintenacne11": {
+                                "description": "Vehicle owned by User 4",
+                                "summary": "Maintenance 11",
+                                "value": "01978640-1148-74f8-be64-bc7c09adc4c1"
+                            },
+                            "maintenacne12": {
+                                "description": "Vehicle shared by User 6 with User 7",
+                                "summary": "Maintenance 12",
+                                "value": "01978640-1148-74f8-be64-ac02bbbf11cf"
+                            },
+                            "maintenacne13": {
+                                "description": "Vehicle owned by User 8",
+                                "summary": "Maintenance 13",
+                                "value": "01978640-1148-74f8-be64-b446e827f938"
+                            },
+                            "maintenacne14": {
+                                "description": "Vehicle shared by User 1 with User 2 and User 3",
+                                "summary": "Maintenance 14",
+                                "value": "01978640-1148-74f8-be64-ba806fa103c7"
+                            },
+                            "maintenacne15": {
+                                "description": "Vehicle owned by User 4",
+                                "summary": "Maintenance 15",
+                                "value": "01978640-1149-7118-bada-9f77b4fa870a"
+                            },
+                            "maintenacne16": {
+                                "description": "Vehicle shared by User 6 with User 7",
+                                "summary": "Maintenance 16",
+                                "value": "01978640-1149-7118-bada-a16e466c1064"
+                            },
+                            "maintenacne17": {
+                                "description": "Vehicle owned by User 8",
+                                "summary": "Maintenance 17",
+                                "value": "01978640-1149-7118-bada-a7ce46886414"
+                            },
+                            "maintenacne18": {
+                                "description": "Vehicle shared by User 1 with User 2 and User 3",
+                                "summary": "Maintenance 18",
+                                "value": "01978640-1149-7118-bada-aa596985d112"
+                            },
+                            "maintenacne2": {
+                                "description": "Vehicle shared by User 1 with User 2 and User 3",
+                                "summary": "Maintenance 2",
+                                "value": "01978640-1148-74f8-be64-5e6b15475861"
+                            },
+                            "maintenacne3": {
+                                "description": "Vehicle owned by User 4",
+                                "summary": "Maintenance 3",
+                                "value": "01978640-1148-74f8-be64-600b58c80190"
+                            },
+                            "maintenacne4": {
+                                "description": "Vehicle shared by User 6 with User 7",
+                                "summary": "Maintenance 4",
+                                "value": "01978640-1148-74f8-be64-673c2bc659d3"
+                            },
+                            "maintenacne5": {
+                                "description": "Vehicle owned by User 8",
+                                "summary": "Maintenance 5",
+                                "value": "01978640-1148-74f8-be64-6b2a85c627a7"
+                            },
+                            "maintenacne6": {
+                                "description": "Vehicle shared by User 1 with User 2 and User 3",
+                                "summary": "Maintenance 6",
+                                "value": "01978640-1148-74f8-be64-6ce4acd8abcd"
+                            },
+                            "maintenacne7": {
+                                "description": "Vehicle owned by User 4",
+                                "summary": "Maintenance 7",
+                                "value": "01978640-1148-74f8-be64-70821e946a20"
+                            },
+                            "maintenacne8": {
+                                "description": "Vehicle shared by User 6 with User",
+                                "summary": "Maintenance 8",
+                                "value": "01978640-1148-74f8-be64-74b319513577"
+                            },
+                            "maintenacne9": {
+                                "description": "Vehicle owned by User 8",
+                                "summary": "Maintenance 9",
+                                "value": "01978640-1148-74f8-be64-7b8ece4dc40f"
+                            }
+                        },
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/models.MaintenanceRecordBase"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    }
+                },
+                "summary": "Get maintenance record",
+                "tags": [
+                    "Maintenance"
+                ]
+            },
+            "patch": {
+                "description": "Update a maintenance record by its UUID.",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Maintenance Record UUID",
+                        "examples": {
+                            "maintenance1": {
+                                "description": "Maintenance record for vehilce 2, shared by User 1 with User 2 (write access) and User 3",
+                                "summary": "Maintenance Record",
+                                "value": "01978640-1148-74f8-be64-600b58c80190"
+                            }
+                        },
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "examples": {
+                                "maintenance_record_modify": {
+                                    "description": "Set notes to \"NEW DATA\"",
+                                    "summary": "Modify maintenance record",
+                                    "value": "{ \"notes\": \"NEW DATA\" }"
+                                },
+                                "maintenance_record_reset": {
+                                    "description": "Reset maintenance record to original state",
+                                    "summary": "Reset maintenance record",
+                                    "value": "{ \"notes\": \"Brake inspection\" }"
+                                }
+                            },
+                            "schema": {
+                                "$ref": "#/components/schemas/models.MaintenanceRecordBase"
+                            }
+                        }
+                    },
+                    "description": "Maintenance record object",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/models.MaintenanceRecordBase"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    }
+                },
+                "summary": "Update maintenance record",
+                "tags": [
+                    "Maintenance"
+                ]
+            }
+        },
         "/user": {
             "get": {
                 "description": "Useful for getting the current user's information",
@@ -863,6 +1332,122 @@ const docTemplate = `{
                 "summary": "Update vehicle",
                 "tags": [
                     "Vehicles"
+                ]
+            }
+        },
+        "/vehicle/{uuid}/maintenance": {
+            "get": {
+                "description": "Retrieves all maintenance locations for a vehicle",
+                "parameters": [
+                    {
+                        "description": "User ID",
+                        "examples": {
+                            "user1": {
+                                "description": "User has One personal vehicle and one shared vehicle",
+                                "summary": "User 1",
+                                "value": "019785fe-4eb4-766e-9c45-bec7780972a2"
+                            },
+                            "user2": {
+                                "description": "User has vehicle shared FROM User 1 with write access",
+                                "summary": "User 2",
+                                "value": "019785fe-4eb4-766e-9c45-c1f83e7c1f1f"
+                            },
+                            "user3": {
+                                "description": "User has vehicle shared FROM User 1 with read access",
+                                "summary": "User 3",
+                                "value": "019785fe-4eb4-766e-9c45-c497f2d9fe9e"
+                            },
+                            "user4": {
+                                "description": "User has One personal vehicle",
+                                "summary": "User 4",
+                                "value": "019785fe-4eb4-766e-9c45-c8578456b4df"
+                            },
+                            "user5": {
+                                "description": "User has no vehicles, no vehicles shared",
+                                "summary": "User 5",
+                                "value": "019785fe-4eb4-766e-9c45-cec136a9ad6f"
+                            },
+                            "user6": {
+                                "description": "User has One vehicle to share",
+                                "summary": "User 6",
+                                "value": "019785fe-4eb4-766e-9c45-f592a1187d0c"
+                            },
+                            "user7": {
+                                "description": "User has vehicle shared FROM User 1 and User 6, both with write access",
+                                "summary": "User 7",
+                                "value": "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3"
+                            },
+                            "user8": {
+                                "description": "User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)",
+                                "summary": "User 8",
+                                "value": "019785fe-4eb4-766e-9c45-fc6ed4a7407b"
+                            }
+                        },
+                        "in": "header",
+                        "name": "auth_uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Vehicle UUID",
+                        "examples": {
+                            "vehicle1": {
+                                "description": "Vehicle owned by User 1",
+                                "summary": "Vehicle 1",
+                                "value": "019785fe-4eb4-766e-9c45-d0b2bb289b82"
+                            },
+                            "vehicle2": {
+                                "description": "Vehicle shared by User 1 with User 2",
+                                "summary": "Vehicle 2",
+                                "value": "019785fe-4eb4-766e-9c45-d77f41aa8317"
+                            },
+                            "vehicle3": {
+                                "description": "Vehicle owned by User 4",
+                                "summary": "Vehicle 3",
+                                "value": "019785fe-4eb4-766e-9c45-d9cc7ea628c1"
+                            },
+                            "vehicle4": {
+                                "description": "Vehicle shared by User 6 with User 7",
+                                "summary": "Vehicle 4",
+                                "value": "019785fe-4eb4-766e-9c45-ddfb4b2e7210"
+                            },
+                            "vehicle5": {
+                                "description": "Vehicle owned by User 8",
+                                "summary": "Vehicle 5",
+                                "value": "019785fe-4eb4-766e-9c45-e1af5010246b"
+                            }
+                        },
+                        "in": "path",
+                        "name": "uuid",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    }
+                },
+                "summary": "Get maintenance",
+                "tags": [
+                    "Maintenance"
                 ]
             }
         }
