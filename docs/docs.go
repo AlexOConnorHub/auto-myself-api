@@ -157,7 +157,7 @@ const docTemplate = `{
                         "application/json": {
                             "examples": {
                                 "maintenance_record1": {
-                                    "description": "Create a new maintenancerecord with notes \"A Fresh Vehicle\"",
+                                    "description": "Create a new maintenance record with notes \"A Fresh Vehicle\"",
                                     "summary": "Create a maintenance record",
                                     "value": "{ \"notes\": \"A Fresh Vehicle\" }"
                                 }
@@ -322,92 +322,92 @@ const docTemplate = `{
                     {
                         "description": "Maintenance Record UUID",
                         "examples": {
-                            "maintenacne1": {
+                            "maintenance1": {
                                 "description": "Vehicle owned by User 1",
                                 "summary": "Maintenance 1",
                                 "value": "01978640-1148-74f8-be64-59f2af568e59"
                             },
-                            "maintenacne10": {
+                            "maintenance10": {
                                 "description": "Vehicle shared by User 1 with User 2 and User 3",
                                 "summary": "Maintenance 10",
                                 "value": "01978640-1148-74f8-be64-7ea0e41d68d5"
                             },
-                            "maintenacne11": {
+                            "maintenance11": {
                                 "description": "Vehicle owned by User 4",
                                 "summary": "Maintenance 11",
                                 "value": "01978640-1148-74f8-be64-bc7c09adc4c1"
                             },
-                            "maintenacne12": {
+                            "maintenance12": {
                                 "description": "Vehicle shared by User 6 with User 7",
                                 "summary": "Maintenance 12",
                                 "value": "01978640-1148-74f8-be64-ac02bbbf11cf"
                             },
-                            "maintenacne13": {
+                            "maintenance13": {
                                 "description": "Vehicle owned by User 8",
                                 "summary": "Maintenance 13",
                                 "value": "01978640-1148-74f8-be64-b446e827f938"
                             },
-                            "maintenacne14": {
+                            "maintenance14": {
                                 "description": "Vehicle shared by User 1 with User 2 and User 3",
                                 "summary": "Maintenance 14",
                                 "value": "01978640-1148-74f8-be64-ba806fa103c7"
                             },
-                            "maintenacne15": {
+                            "maintenance15": {
                                 "description": "Vehicle owned by User 4",
                                 "summary": "Maintenance 15",
                                 "value": "01978640-1149-7118-bada-9f77b4fa870a"
                             },
-                            "maintenacne16": {
+                            "maintenance16": {
                                 "description": "Vehicle shared by User 6 with User 7",
                                 "summary": "Maintenance 16",
                                 "value": "01978640-1149-7118-bada-a16e466c1064"
                             },
-                            "maintenacne17": {
+                            "maintenance17": {
                                 "description": "Vehicle owned by User 8",
                                 "summary": "Maintenance 17",
                                 "value": "01978640-1149-7118-bada-a7ce46886414"
                             },
-                            "maintenacne18": {
+                            "maintenance18": {
                                 "description": "Vehicle shared by User 1 with User 2 and User 3",
                                 "summary": "Maintenance 18",
                                 "value": "01978640-1149-7118-bada-aa596985d112"
                             },
-                            "maintenacne2": {
+                            "maintenance2": {
                                 "description": "Vehicle shared by User 1 with User 2 and User 3",
                                 "summary": "Maintenance 2",
                                 "value": "01978640-1148-74f8-be64-5e6b15475861"
                             },
-                            "maintenacne3": {
+                            "maintenance3": {
                                 "description": "Vehicle owned by User 4",
                                 "summary": "Maintenance 3",
                                 "value": "01978640-1148-74f8-be64-600b58c80190"
                             },
-                            "maintenacne4": {
+                            "maintenance4": {
                                 "description": "Vehicle shared by User 6 with User 7",
                                 "summary": "Maintenance 4",
                                 "value": "01978640-1148-74f8-be64-673c2bc659d3"
                             },
-                            "maintenacne5": {
+                            "maintenance5": {
                                 "description": "Vehicle owned by User 8",
                                 "summary": "Maintenance 5",
                                 "value": "01978640-1148-74f8-be64-6b2a85c627a7"
                             },
-                            "maintenacne6": {
+                            "maintenance6": {
                                 "description": "Vehicle shared by User 1 with User 2 and User 3",
                                 "summary": "Maintenance 6",
                                 "value": "01978640-1148-74f8-be64-6ce4acd8abcd"
                             },
-                            "maintenacne7": {
+                            "maintenance7": {
                                 "description": "Vehicle owned by User 4",
                                 "summary": "Maintenance 7",
                                 "value": "01978640-1148-74f8-be64-70821e946a20"
                             },
-                            "maintenacne8": {
+                            "maintenance8": {
                                 "description": "Vehicle shared by User 6 with User",
                                 "summary": "Maintenance 8",
                                 "value": "01978640-1148-74f8-be64-74b319513577"
                             },
-                            "maintenacne9": {
+                            "maintenance9": {
                                 "description": "Vehicle owned by User 8",
                                 "summary": "Maintenance 9",
                                 "value": "01978640-1148-74f8-be64-7b8ece4dc40f"
@@ -479,7 +479,7 @@ const docTemplate = `{
                         "description": "Maintenance Record UUID",
                         "examples": {
                             "maintenance1": {
-                                "description": "Maintenance record for vehilce 2, shared by User 1 with User 2 (write access) and User 3",
+                                "description": "Maintenance record for vehicle 2, shared by User 1 with User 2 (write access) and User 3",
                                 "summary": "Maintenance Record",
                                 "value": "01978640-1148-74f8-be64-600b58c80190"
                             }
@@ -1292,13 +1292,13 @@ const docTemplate = `{
                     "content": {
                         "application/json": {
                             "examples": {
-                                "vehcile_modify": {
+                                "vehicle_modify": {
                                     "description": "Set nickname to \"Modified Vehicle 2\"",
                                     "summary": "Modify vehicle",
                                     "value": "{ \"nickname\": \"Modified Vehicle 2\" }"
                                 },
-                                "vehcile_reset": {
-                                    "description": "Reset vehcile to original state",
+                                "vehicle_reset": {
+                                    "description": "Reset vehicle to original state",
                                     "summary": "Reset Vehicle",
                                     "value": "{ \"Nickname\": \"Vehicle 2\" }"
                                 }
