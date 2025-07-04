@@ -288,12 +288,12 @@ func DeleteVehicleByID(c *gin.Context) {
 // @Param.examples uuid vehicle2 description Vehicle shared by User 1 with User 2 (write access) and User 3
 // @Param.examples uuid vehicle2 value 019785fe-4eb4-766e-9c45-d77f41aa8317
 // @Param user body models.VehicleBase true "Vehicle object"
-// @Param.examples user vehcile_modify summary Modify vehicle
-// @Param.examples user vehcile_modify description Set nickname to "Modified Vehicle 2"
-// @Param.examples user vehcile_modify value { "nickname": "Modified Vehicle 2" }
-// @Param.examples user vehcile_reset summary Reset Vehicle
-// @Param.examples user vehcile_reset description Reset vehcile to original state
-// @Param.examples user vehcile_reset value { "Nickname": "Vehicle 2" }
+// @Param.examples user vehicle_modify summary Modify vehicle
+// @Param.examples user vehicle_modify description Set nickname to "Modified Vehicle 2"
+// @Param.examples user vehicle_modify value { "nickname": "Modified Vehicle 2" }
+// @Param.examples user vehicle_reset summary Reset Vehicle
+// @Param.examples user vehicle_reset description Reset vehicle to original state
+// @Param.examples user vehicle_reset value { "Nickname": "Vehicle 2" }
 // @Router /vehicle/{uuid} [patch]
 func UpdateVehicleByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)

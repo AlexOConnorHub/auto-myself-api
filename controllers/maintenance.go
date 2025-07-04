@@ -61,7 +61,7 @@ import (
 func GetAllMaintenance(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
+	vehicleUUID, err := models.ParseUUID(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -69,7 +69,7 @@ func GetAllMaintenance(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.Where("id = ?", vehiceUUID).First(&vehicle).Error
+	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -126,60 +126,60 @@ func GetAllMaintenance(c *gin.Context) {
 // @Param.examples auth_uuid user8 description User has One personal vehicle, vehicle shared FROM User 1 (write) and User 6 (read)
 // @Param.examples auth_uuid user8 value 019785fe-4eb4-766e-9c45-fc6ed4a7407b
 // @Param uuid path string true "Maintenance Record UUID"
-// @Param.examples uuid maintenacne1 summary Maintenance 1
-// @Param.examples uuid maintenacne1 description Vehicle owned by User 1
-// @Param.examples uuid maintenacne1 value 01978640-1148-74f8-be64-59f2af568e59
-// @Param.examples uuid maintenacne2 summary Maintenance 2
-// @Param.examples uuid maintenacne2 description Vehicle shared by User 1 with User 2 and User 3
-// @Param.examples uuid maintenacne2 value 01978640-1148-74f8-be64-5e6b15475861
-// @Param.examples uuid maintenacne3 summary Maintenance 3
-// @Param.examples uuid maintenacne3 description Vehicle owned by User 4
-// @Param.examples uuid maintenacne3 value 01978640-1148-74f8-be64-600b58c80190
-// @Param.examples uuid maintenacne4 summary Maintenance 4
-// @Param.examples uuid maintenacne4 description Vehicle shared by User 6 with User 7
-// @Param.examples uuid maintenacne4 value 01978640-1148-74f8-be64-673c2bc659d3
-// @Param.examples uuid maintenacne5 summary Maintenance 5
-// @Param.examples uuid maintenacne5 description Vehicle owned by User 8
-// @Param.examples uuid maintenacne5 value 01978640-1148-74f8-be64-6b2a85c627a7
-// @Param.examples uuid maintenacne6 summary Maintenance 6
-// @Param.examples uuid maintenacne6 description Vehicle shared by User 1 with User 2 and User 3
-// @Param.examples uuid maintenacne6 value 01978640-1148-74f8-be64-6ce4acd8abcd
-// @Param.examples uuid maintenacne7 summary Maintenance 7
-// @Param.examples uuid maintenacne7 description Vehicle owned by User 4
-// @Param.examples uuid maintenacne7 value 01978640-1148-74f8-be64-70821e946a20
-// @Param.examples uuid maintenacne8 summary Maintenance 8
-// @Param.examples uuid maintenacne8 description Vehicle shared by User 6 with User
-// @Param.examples uuid maintenacne8 value 01978640-1148-74f8-be64-74b319513577
-// @Param.examples uuid maintenacne9 summary Maintenance 9
-// @Param.examples uuid maintenacne9 description Vehicle owned by User 8
-// @Param.examples uuid maintenacne9 value 01978640-1148-74f8-be64-7b8ece4dc40f
-// @Param.examples uuid maintenacne10 summary Maintenance 10
-// @Param.examples uuid maintenacne10 description Vehicle shared by User 1 with User 2 and User 3
-// @Param.examples uuid maintenacne10 value 01978640-1148-74f8-be64-7ea0e41d68d5
-// @Param.examples uuid maintenacne11 summary Maintenance 11
-// @Param.examples uuid maintenacne11 description Vehicle owned by User 4
-// @Param.examples uuid maintenacne11 value 01978640-1148-74f8-be64-bc7c09adc4c1
-// @Param.examples uuid maintenacne12 summary Maintenance 12
-// @Param.examples uuid maintenacne12 description Vehicle shared by User 6 with User 7
-// @Param.examples uuid maintenacne12 value 01978640-1148-74f8-be64-ac02bbbf11cf
-// @Param.examples uuid maintenacne13 summary Maintenance 13
-// @Param.examples uuid maintenacne13 description Vehicle owned by User 8
-// @Param.examples uuid maintenacne13 value 01978640-1148-74f8-be64-b446e827f938
-// @Param.examples uuid maintenacne14 summary Maintenance 14
-// @Param.examples uuid maintenacne14 description Vehicle shared by User 1 with User 2 and User 3
-// @Param.examples uuid maintenacne14 value 01978640-1148-74f8-be64-ba806fa103c7
-// @Param.examples uuid maintenacne15 summary Maintenance 15
-// @Param.examples uuid maintenacne15 description Vehicle owned by User 4
-// @Param.examples uuid maintenacne15 value 01978640-1149-7118-bada-9f77b4fa870a
-// @Param.examples uuid maintenacne16 summary Maintenance 16
-// @Param.examples uuid maintenacne16 description Vehicle shared by User 6 with User 7
-// @Param.examples uuid maintenacne16 value 01978640-1149-7118-bada-a16e466c1064
-// @Param.examples uuid maintenacne17 summary Maintenance 17
-// @Param.examples uuid maintenacne17 description Vehicle owned by User 8
-// @Param.examples uuid maintenacne17 value 01978640-1149-7118-bada-a7ce46886414
-// @Param.examples uuid maintenacne18 summary Maintenance 18
-// @Param.examples uuid maintenacne18 description Vehicle shared by User 1 with User 2 and User 3
-// @Param.examples uuid maintenacne18 value 01978640-1149-7118-bada-aa596985d112
+// @Param.examples uuid maintenance1 summary Maintenance 1
+// @Param.examples uuid maintenance1 description Vehicle owned by User 1
+// @Param.examples uuid maintenance1 value 01978640-1148-74f8-be64-59f2af568e59
+// @Param.examples uuid maintenance2 summary Maintenance 2
+// @Param.examples uuid maintenance2 description Vehicle shared by User 1 with User 2 and User 3
+// @Param.examples uuid maintenance2 value 01978640-1148-74f8-be64-5e6b15475861
+// @Param.examples uuid maintenance3 summary Maintenance 3
+// @Param.examples uuid maintenance3 description Vehicle owned by User 4
+// @Param.examples uuid maintenance3 value 01978640-1148-74f8-be64-600b58c80190
+// @Param.examples uuid maintenance4 summary Maintenance 4
+// @Param.examples uuid maintenance4 description Vehicle shared by User 6 with User 7
+// @Param.examples uuid maintenance4 value 01978640-1148-74f8-be64-673c2bc659d3
+// @Param.examples uuid maintenance5 summary Maintenance 5
+// @Param.examples uuid maintenance5 description Vehicle owned by User 8
+// @Param.examples uuid maintenance5 value 01978640-1148-74f8-be64-6b2a85c627a7
+// @Param.examples uuid maintenance6 summary Maintenance 6
+// @Param.examples uuid maintenance6 description Vehicle shared by User 1 with User 2 and User 3
+// @Param.examples uuid maintenance6 value 01978640-1148-74f8-be64-6ce4acd8abcd
+// @Param.examples uuid maintenance7 summary Maintenance 7
+// @Param.examples uuid maintenance7 description Vehicle owned by User 4
+// @Param.examples uuid maintenance7 value 01978640-1148-74f8-be64-70821e946a20
+// @Param.examples uuid maintenance8 summary Maintenance 8
+// @Param.examples uuid maintenance8 description Vehicle shared by User 6 with User
+// @Param.examples uuid maintenance8 value 01978640-1148-74f8-be64-74b319513577
+// @Param.examples uuid maintenance9 summary Maintenance 9
+// @Param.examples uuid maintenance9 description Vehicle owned by User 8
+// @Param.examples uuid maintenance9 value 01978640-1148-74f8-be64-7b8ece4dc40f
+// @Param.examples uuid maintenance10 summary Maintenance 10
+// @Param.examples uuid maintenance10 description Vehicle shared by User 1 with User 2 and User 3
+// @Param.examples uuid maintenance10 value 01978640-1148-74f8-be64-7ea0e41d68d5
+// @Param.examples uuid maintenance11 summary Maintenance 11
+// @Param.examples uuid maintenance11 description Vehicle owned by User 4
+// @Param.examples uuid maintenance11 value 01978640-1148-74f8-be64-bc7c09adc4c1
+// @Param.examples uuid maintenance12 summary Maintenance 12
+// @Param.examples uuid maintenance12 description Vehicle shared by User 6 with User 7
+// @Param.examples uuid maintenance12 value 01978640-1148-74f8-be64-ac02bbbf11cf
+// @Param.examples uuid maintenance13 summary Maintenance 13
+// @Param.examples uuid maintenance13 description Vehicle owned by User 8
+// @Param.examples uuid maintenance13 value 01978640-1148-74f8-be64-b446e827f938
+// @Param.examples uuid maintenance14 summary Maintenance 14
+// @Param.examples uuid maintenance14 description Vehicle shared by User 1 with User 2 and User 3
+// @Param.examples uuid maintenance14 value 01978640-1148-74f8-be64-ba806fa103c7
+// @Param.examples uuid maintenance15 summary Maintenance 15
+// @Param.examples uuid maintenance15 description Vehicle owned by User 4
+// @Param.examples uuid maintenance15 value 01978640-1149-7118-bada-9f77b4fa870a
+// @Param.examples uuid maintenance16 summary Maintenance 16
+// @Param.examples uuid maintenance16 description Vehicle shared by User 6 with User 7
+// @Param.examples uuid maintenance16 value 01978640-1149-7118-bada-a16e466c1064
+// @Param.examples uuid maintenance17 summary Maintenance 17
+// @Param.examples uuid maintenance17 description Vehicle owned by User 8
+// @Param.examples uuid maintenance17 value 01978640-1149-7118-bada-a7ce46886414
+// @Param.examples uuid maintenance18 summary Maintenance 18
+// @Param.examples uuid maintenance18 description Vehicle shared by User 1 with User 2 and User 3
+// @Param.examples uuid maintenance18 value 01978640-1149-7118-bada-aa596985d112
 // @Router /maintenance/{uuid} [get]
 func GetMaintenanceByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
@@ -242,7 +242,7 @@ func GetMaintenanceByID(c *gin.Context) {
 // @Param.examples auth_uuid user8 value 019785fe-4eb4-766e-9c45-fc6ed4a7407b
 // @Param maintenance_record body models.MaintenanceRecordBase true "New maintenance record"
 // @Param.examples maintenance_record maintenance_record1 summary Create a maintenance record
-// @Param.examples maintenance_record maintenance_record1 description Create a new maintenancerecord with notes "A Fresh Vehicle"
+// @Param.examples maintenance_record maintenance_record1 description Create a new maintenance record with notes "A Fresh Vehicle"
 // @Param.examples maintenance_record maintenance_record1 value { "notes": "A Fresh Vehicle" }
 // @Router /maintenance [post]
 func CreateMaintenance(c *gin.Context) {
@@ -361,7 +361,7 @@ func DeleteMaintenanceByID(c *gin.Context) {
 // @Param.examples auth_uuid user4 value 019785fe-4eb4-766e-9c45-c8578456b4df
 // @Param uuid path string true "Maintenance Record UUID"
 // @Param.examples uuid maintenance1 summary Maintenance Record
-// @Param.examples uuid maintenance1 description Maintenance record for vehilce 2, shared by User 1 with User 2 (write access) and User 3
+// @Param.examples uuid maintenance1 description Maintenance record for vehicle 2, shared by User 1 with User 2 (write access) and User 3
 // @Param.examples uuid maintenance1 value 01978640-1148-74f8-be64-600b58c80190
 // @Param maintenance_record body models.MaintenanceRecordBase true "Maintenance record object"
 // @Param.examples maintenance_record maintenance_record_modify summary Modify maintenance record
