@@ -15,8 +15,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-appdb}
     volumes:
       - .:/app
-      - /root/.cache/go-build:/root/.cache/go-build
-      - /root/go/pkg/mod:/root/go/pkg/mod
+      - build_cache:/root/.cache/go-build
+      - mod_cache:/root/go/pkg/mod
     develop:
       watch:
         - action: restart
@@ -33,15 +33,11 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-
   # redis:
   #   image: redis:7
   #   ports:
-  #     - "6379:6379"
-  migrate:
-    image: migrate/migrate
-    volumes:
-      - ./migrations:/migrations
+  #     - "6379:6379""]
 volumes:
   pgdata:
-  cloudbeaver:
+  build_cache:
+  mod_cache:
