@@ -1,0 +1,45 @@
+services:
+  migrate:
+    image: migrate/migrate
+    volumes:
+      - ./migrations/schema:/migrations
+    entrypoint: ["migrate", "-path=/migrations", "-database=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable&search_path=public&x-migrations-table=_schema_migrations"]
+    command: ["up"]
+  seed:
+    image: migrate/migrate
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./migrations/seed:/migrations
+    entrypoint: ["migrate", "-path=/migrations", "-database=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable&search_path=public&x-migrations-table=_seed_migrations"]
+    command: ["up"]
+  test:
+    image: golang:1.24-bookworm
+    depends_on:
+      - postgres_test
+      # - redis_test
+    environment:
+      - GIN_MODE=${GIN_MODE:-release}
+      - POSTGRES_TEST_HOST=${POSTGRES_TEST_HOST:-postgres_test}
+      - POSTGRES_TEST_PORT=${POSTGRES_TEST_PORT:-5432}
+      - POSTGRES_TEST_USER=${POSTGRES_TEST_USER:-postgres_test}
+      - POSTGRES_TEST_PASSWORD=${POSTGRES_TEST_PASSWORD:-password_test}
+      - POSTGRES_TEST_DB=${POSTGRES_TEST_DB:-appdb_test}
+    volumes:
+      - ./:/app
+      - build_cache:/root/.cache/go-build
+      - mod_cache:/root/go/pkg/mod
+    working_dir: /app
+    entrypoint: ["go", "test", "-tags=test", "-v", "./..."]
+  postgres_test:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-postgres_test}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-password_test}
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-appdb_test}
+    expose:
+      - "${POSTGRES_TEST_PORT:-5432}:5432"
+volumes:
+  build_cache:
+  mod_cache:

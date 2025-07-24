@@ -1,3 +1,0 @@
-#!/bin/bash
-source .env
-docker compose run --rm migrate -path=/migrations/schema -database=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-appdb}?sslmode=disable\&search_path=public\&x-migrations-table=_schema_migrations ${@:-up}

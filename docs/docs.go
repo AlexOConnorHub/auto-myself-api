@@ -14,7 +14,7 @@ const docTemplate = `{
                         "type": "string"
                     },
                     "interval": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "interval_type": {
                         "type": "string"
