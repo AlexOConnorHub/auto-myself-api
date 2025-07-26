@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"auto-myself-api/database"
+	"auto-myself-api/models"
 	"context"
 	"errors"
 	"log"
@@ -10,6 +12,8 @@ import (
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid"
+	"gorm.io/gorm"
 )
 
 // CustomClaimsExample contains custom data we want from the token.
@@ -49,7 +53,39 @@ var (
 	}
 )
 
-func CheckJWT() gin.HandlerFunc {
+func ContextGetUserHeaderMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uuidFromHeader := c.Request.Header.Get("auth_uuid")
+		if uuidFromHeader == "" {
+			c.Next()
+			return
+		}
+		parsedUUID, err := uuid.FromString(uuidFromHeader)
+		if err != nil {
+			c.AbortWithError(http.StatusUnprocessableEntity, err)
+			return
+		}
+
+		var user = models.User{}
+
+		err = database.DB.Where("id = ?", parsedUUID).First(&user).Error
+
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.AbortWithStatus(http.StatusUnauthorized)
+				return
+			}
+
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.Set("user", user)
+		c.Next()
+	}
+}
+
+func ContextGetUserJWTMiddleware() gin.HandlerFunc {
 	jwtValidator, err := validator.New(
 		keyFunc,
 		validator.HS256,

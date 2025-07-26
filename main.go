@@ -1,8 +1,8 @@
 package main
 
 import (
+	"auto-myself-api/controllers"
 	"auto-myself-api/database"
-	"auto-myself-api/routes"
 	"context"
 	"log"
 	"net/http"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
+	_ "github.com/joho/godotenv/autoload"
 
 	_ "auto-myself-api/docs"
 
@@ -52,19 +52,13 @@ import (
 //	// @scope.user_id							Provides information to associate the authenticated user and data for that user
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
 	database.Init()
 
 	r := gin.Default()
 	r.TrustedPlatform = gin.PlatformCloudflare
-	r.SetTrustedProxies(nil)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
-	routes.SetupRoutes(r)
+	controllers.SetupRoutes(r)
 
 	srv := &http.Server{
 		Addr:    ":8080",

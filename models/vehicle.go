@@ -2,6 +2,7 @@ package models
 
 import (
 	"auto-myself-api/database"
+	"auto-myself-api/helpers"
 
 	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
@@ -19,7 +20,7 @@ type VehicleBase struct {
 }
 
 type Vehicle struct {
-	DatabaseMetadata
+	helpers.DatabaseMetadata
 	VehicleBase
 	CreatedBy          uuid.UUID           `json:"created_by" gorm:"type:uuid;not null"`
 	CreatedByUser      User                `gorm:"foreignKey:CreatedBy;references:ID;constraint"`

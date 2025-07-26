@@ -1,16 +1,43 @@
-//go:build test
-
 package database
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-func InitTest() {
+func getRelativeRootPath(tb testing.TB) string {
+	tb.Helper()
+
+	importPath := runGoList(tb, "list", "-f", "{{.ImportPath}}")
+	modulePath := runGoList(tb, "list", "-m", "-f", "{{.Path}}")
+	pkgPath := runGoList(tb, "list", "-f", "{{.Dir}}")
+
+	relativePath, err := filepath.Rel(importPath, modulePath)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return filepath.Join(pkgPath, relativePath)
+}
+
+func runGoList(tb testing.TB, arg ...string) string {
+	tb.Helper()
+	cmd := exec.Command("go", arg...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		tb.Fatalf("runGoList: %v: %s", err, string(output))
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func InitTest(tb testing.TB) {
+	tb.Helper()
 	user := os.Getenv("POSTGRES_TEST_USER")
 	pass := os.Getenv("POSTGRES_TEST_PASSWORD")
 	host := os.Getenv("POSTGRES_TEST_HOST")
@@ -37,8 +64,11 @@ func InitTest() {
 		panic("failed to create seed driver: " + err.Error())
 	}
 
+	// _, file, _, _ := runtime.Caller(0)
+	cwd := getRelativeRootPath(tb)
+
 	m, err := migrate.NewWithDatabaseInstance(
-		"file:///app/migrations/schema",
+		"file://"+cwd+"/migrations/schema",
 		"postgres", schema_driver)
 	if err != nil {
 		LogError(err)
@@ -47,7 +77,7 @@ func InitTest() {
 	m.Up()
 
 	m, err = migrate.NewWithDatabaseInstance(
-		"file:///app/migrations/seed",
+		"file://"+cwd+"/migrations/seed",
 		"postgres", seed_driver)
 	if err != nil {
 		LogError(err)

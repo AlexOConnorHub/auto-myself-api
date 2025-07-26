@@ -6,8 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
-	// "github.com/go-redis/redis/v8"
-	// "context"
 )
 
 var (
@@ -21,13 +19,12 @@ func getVisitor(ip string) *rate.Limiter {
 
 	limiter, exists := visitors[ip]
 	if !exists {
-		limiter = rate.NewLimiter(1, 5) // 1 request/sec with burst of 5
+		limiter = rate.NewLimiter(20, 50)
 		visitors[ip] = limiter
 	}
 	return limiter
 }
 
-// RateLimitMiddleware is an in-memory IP-based rate limiter.
 func RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()

@@ -22,7 +22,7 @@ services:
         - action: restart
           path: ./
     working_dir: /app
-    entrypoint: ["go", "run", "main.go"]
+    entrypoint: ["go", "run", "${BUILD_ARGS}", "main.go"]
   postgres:
     image: postgres:15
     environment:

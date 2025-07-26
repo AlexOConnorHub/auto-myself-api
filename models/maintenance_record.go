@@ -1,6 +1,7 @@
 package models
 
 import (
+	"auto-myself-api/helpers"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -19,7 +20,7 @@ type MaintenanceRecordBase struct {
 }
 
 type MaintenanceRecord struct {
-	DatabaseMetadata
+	helpers.DatabaseMetadata
 	MaintenanceRecordBase
 	CreatedBy     uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
 	CreatedByUser User      `gorm:"foreignKey:CreatedBy;references:ID;constraint"`

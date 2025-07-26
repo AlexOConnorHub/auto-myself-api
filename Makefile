@@ -1,4 +1,4 @@
-.PHONY: build clean test run migrate seed
+.PHONY: migrate seed test dev up restart logs  clean run 
 
 ifneq (,$(filter $(MAKECMDGOALS),migrate seed))
   PROVIDED_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -7,16 +7,15 @@ ifneq (,$(filter $(MAKECMDGOALS),migrate seed))
 endif
 
 migrate:
-	docker compose -f compose-utilities.yml run --rm migrate $(PROVIDED_ARGS)
+	docker compose -f compose-utilities.yml -f compose.yml run --rm migrate $(PROVIDED_ARGS)
 
 seed:
-	docker compose -f compose-utilities.yml run --rm seed $(PROVIDED_ARGS)
+	docker compose -f compose-utilities.yml -f compose.yml run --rm seed $(PROVIDED_ARGS)
 
 test:
-	docker compose -f compose-utilities.yml up test
-	docker compose -f compose-utilities.yml down
+	docker compose -f compose-utilities.yml -f compose.yml up test
 
-watch:
+dev:
 	docker compose up --build --watch api
 
 up:
