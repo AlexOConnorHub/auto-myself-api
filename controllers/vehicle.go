@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"auto-myself-api/database"
+	"auto-myself-api/helpers"
 	"auto-myself-api/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 )
 
@@ -111,7 +113,7 @@ func GetAllVehicles(c *gin.Context) {
 func GetVehicleByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
+	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -119,7 +121,7 @@ func GetVehicleByID(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.Where("id = ?", vehiceUUID).First(&vehicle).Error
+	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -227,7 +229,7 @@ func CreateVehicle(c *gin.Context) {
 func DeleteVehicleByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
+	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -235,7 +237,7 @@ func DeleteVehicleByID(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.Where("id = ?", vehiceUUID).First(&vehicle).Error
+	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -298,7 +300,7 @@ func DeleteVehicleByID(c *gin.Context) {
 func UpdateVehicleByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	vehiceUUID, err := models.ParseUUID(c.Param("uuid"))
+	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -306,12 +308,12 @@ func UpdateVehicleByID(c *gin.Context) {
 	}
 
 	vehicle := models.Vehicle{
-		DatabaseMetadata: models.DatabaseMetadata{
-			ID: vehiceUUID,
+		DatabaseMetadata: helpers.DatabaseMetadata{
+			ID: vehicleUUID,
 		},
 	}
 
-	err = database.DB.Where("id = ?", vehiceUUID).First(&vehicle).Error
+	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)

@@ -1,5 +1,3 @@
-//go:build test
-
 package database
 
 import (
@@ -8,7 +6,7 @@ import (
 
 func TestConnection(t *testing.T) {
 	var err error
-	InitTest()
+	InitTest(t)
 
 	err = sqlDB.Ping()
 	if err != nil {

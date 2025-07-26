@@ -26,7 +26,7 @@ services:
         - action: restart
           path: ./
     working_dir: /app
-    command: ["go", "run", "main.go"]
+    entrypoint: ["go", "run", "${BUILD_ARGS}", "main.go"]
   postgres:
     image: postgres:15
     environment:

@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"auto-myself-api/database"
+	"auto-myself-api/helpers"
 	"auto-myself-api/models"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 )
 
@@ -61,7 +63,7 @@ import (
 func GetAllMaintenance(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	vehicleUUID, err := models.ParseUUID(c.Param("uuid"))
+	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -184,7 +186,7 @@ func GetAllMaintenance(c *gin.Context) {
 func GetMaintenanceByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	maintenanceUUID, err := models.ParseUUID(c.Param("uuid"))
+	maintenanceUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -301,7 +303,7 @@ func CreateMaintenance(c *gin.Context) {
 func DeleteMaintenanceByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	maintenanceRecordUUID, err := models.ParseUUID(c.Param("uuid"))
+	maintenanceRecordUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -374,7 +376,7 @@ func DeleteMaintenanceByID(c *gin.Context) {
 func UpdateMaintenanceByID(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	maintenanceUUID, err := models.ParseUUID(c.Param("uuid"))
+	maintenanceUUID, err := uuid.FromString(c.Param("uuid"))
 
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -382,7 +384,7 @@ func UpdateMaintenanceByID(c *gin.Context) {
 	}
 
 	maintenanceRecord := models.MaintenanceRecord{
-		DatabaseMetadata: models.DatabaseMetadata{
+		DatabaseMetadata: helpers.DatabaseMetadata{
 			ID: maintenanceUUID,
 		},
 	}
