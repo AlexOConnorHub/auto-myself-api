@@ -28,7 +28,7 @@ services:
       - build_cache:/root/.cache/go-build
       - mod_cache:/root/go/pkg/mod
     working_dir: /app
-    entrypoint: ["go", "test", "-tags=test", "-v", "./..."]
+    entrypoint: ["go", "test", "-v", "./..."]
   postgres_test:
     image: postgres:15
     environment:

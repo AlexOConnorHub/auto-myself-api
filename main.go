@@ -13,11 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
-
-	_ "auto-myself-api/docs"
-
-	swaggerfiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 //	@title									Auto Myself API
@@ -57,7 +52,6 @@ func main() {
 	r := gin.Default()
 	r.TrustedPlatform = gin.PlatformCloudflare
 
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 	controllers.SetupRoutes(r)
 
 	srv := &http.Server{

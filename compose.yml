@@ -13,6 +13,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-appdb}
+      - GOFLAGS=${BUILD_ARGS:--buildvcs=false}
     volumes:
       - .:/app
       - build_cache:/root/.cache/go-build
@@ -22,7 +23,7 @@ services:
         - action: restart
           path: ./
     working_dir: /app
-    entrypoint: ["go", "run", "${BUILD_ARGS}", "main.go"]
+    entrypoint: ["go", "run", "main.go"]
   postgres:
     image: postgres:15
     environment:
