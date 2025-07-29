@@ -17,6 +17,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - EMAIL_FROM=${EMAIL_FROM}
+      - GOFLAGS=${BUILD_ARGS:--buildvcs=false}
     volumes:
       - .:/app
       - build_cache:/root/.cache/go-build
@@ -26,7 +27,7 @@ services:
         - action: restart
           path: ./
     working_dir: /app
-    entrypoint: ["go", "run", "${BUILD_ARGS}", "main.go"]
+    entrypoint: ["go", "run", "main.go"]
   postgres:
     image: postgres:15
     environment:

@@ -43,13 +43,29 @@ func (u *User) CanRead(user User) bool {
 		CanRead bool `json:"can_read"`
 	}
 	var result Result
+
 	err := database.DB.Raw(`
-	SELECT
-		true AS can_read
+	SELECT true AS can_read
 	FROM vehicles V
-	LEFT JOIN vehicle_user_access A ON V.ID = A.vehicle_id 
-	WHERE V.created_by IN (?, ?) AND A.user_id IN (?, ?) AND V.created_by != A.user_id
-	LIMIT 1`, user.ID, u.ID, user.ID, u.ID).Scan(&result).Error
+	LEFT JOIN vehicle_user_access A ON V.id = A.vehicle_id
+	WHERE
+		( V.created_by = ? AND A.user_id = ?)
+		OR
+		(
+			V.id IN (
+				SELECT V_INNER.id
+				FROM vehicles V_INNER
+				LEFT JOIN vehicle_user_access A_INNER ON V_INNER.id = A_INNER.vehicle_id
+				WHERE A_INNER.user_id = ? OR V_INNER.created_by = ?
+			)
+			AND
+			(
+				( A.user_id = ? AND A.write_access = true )
+				OR
+				V.created_by = ?
+			)
+		)
+	LIMIT 1`, u.ID, user.ID, u.ID, u.ID, user.ID, user.ID).Scan(&result).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
