@@ -333,12 +333,14 @@ func UpdateVehicleByID(c *gin.Context) {
 		return
 	}
 
-	if err := c.ShouldBindJSON(&vehicle.VehicleBase); err != nil {
+	var input models.VehicleBase
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	if err := database.DB.Save(&vehicle).Error; err != nil {
+	if err := database.DB.Model(&vehicle).Updates(input).Error; err != nil {
+		database.LogError(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update vehicle"})
 		return
 	}

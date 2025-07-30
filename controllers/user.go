@@ -113,12 +113,13 @@ func GetUserByID(c *gin.Context) {
 func UpdateCurrentUser(c *gin.Context) {
 	var user = c.MustGet("user").(models.User)
 
-	if err := c.ShouldBindJSON(&user.UserBase); err != nil {
+	var input models.UserBase
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	if err := database.DB.Save(&user).Error; err != nil {
+	if err := database.DB.Model(&user).Updates(input).Error; err != nil {
 		database.LogError(err)
 		c.Status(http.StatusInternalServerError)
 		return

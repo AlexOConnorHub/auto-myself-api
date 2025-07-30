@@ -410,13 +410,14 @@ func UpdateMaintenanceByID(c *gin.Context) {
 		return
 	}
 
-	if err := c.ShouldBindJSON(&maintenanceRecord.MaintenanceRecordBase); err != nil {
+	var input models.MaintenanceRecordBase
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	if err := database.DB.Save(&maintenanceRecord).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update vehicle"})
+	if err := database.DB.Model(&maintenanceRecord).Updates(input).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update maintenance record"})
 		return
 	}
 

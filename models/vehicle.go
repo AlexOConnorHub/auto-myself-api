@@ -67,22 +67,20 @@ func (v *Vehicle) CanRead(user User) bool {
 }
 
 func (v *Vehicle) CanWrite(user User) bool {
-	println("Checking write access for user:", user.ID.String(), "on vehicle:", v.ID.String(), " (Which was created by ", v.CreatedBy.String(), ")")
 	if v.CreatedBy == user.ID {
 		return true
 	}
 
 	type Result struct {
-		CanWrite bool `json:"can_write"`
+		WriteAccess bool `json:"write_access"`
 	}
 	var result Result
 	err := database.DB.Raw(`
 	SELECT
-		true AS can_write
+		A.write_access
 	FROM vehicle_user_access A
 	WHERE A.vehicle_id = ?
 		AND A.user_id = ?
-		AND A.write_access = true
 	LIMIT 1`, v.ID, user.ID).Scan(&result).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
@@ -90,5 +88,5 @@ func (v *Vehicle) CanWrite(user User) bool {
 		}
 		return false
 	}
-	return result.CanWrite
+	return result.WriteAccess
 }
