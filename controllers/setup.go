@@ -62,6 +62,12 @@ func SetupRoutes(r *gin.Engine) {
 	}
 }
 
+var (
+	NO_ACCESS = 0
+	READ_ONLY = 1
+	WRITE     = 2
+)
+
 func setupTest(t *testing.T) *gin.Engine {
 	database.InitTest(t)
 	gin.SetMode(gin.TestMode)
