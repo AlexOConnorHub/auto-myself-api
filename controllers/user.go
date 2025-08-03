@@ -71,7 +71,7 @@ func GetUserByID(c *gin.Context) {
 	user := c.MustGet("user").(models.User)
 
 	var requestedUser models.User
-	if err := database.DB.Where("id = ?", c.Param("uuid")).First(&requestedUser).Error; err != nil {
+	if err := database.DB.First(&requestedUser, "id = ?", c.Param("uuid")).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 			c.Status(http.StatusInternalServerError)

@@ -40,8 +40,6 @@ func InitTest(tb testing.TB) {
 
 	connect(host, user, pass, dbname, port)
 
-	// Use migrate/migrate to migrate to the latest version.
-	// Then, down/up the schema migrations to ensure the test database is clean.
 	schema_driver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
 		MigrationsTable: "_schema_migrations",
 	})

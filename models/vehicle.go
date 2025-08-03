@@ -9,14 +9,14 @@ import (
 )
 
 type VehicleBase struct {
-	Nickname string `json:"nickname" gorm:"type:text"`
-	Make     string `json:"make" gorm:"type:text"`
-	MakeID   int    `json:"make_id" gorm:"type:integer"`
-	Model    string `json:"model" gorm:"type:text"`
-	ModelID  int    `json:"model_id" gorm:"type:integer"`
-	Year     int    `json:"year" gorm:"type:integer"`
-	Vin      string `json:"vin" gorm:"type:text"`
-	Lpn      string `json:"lpn" gorm:"type:text"`
+	Nickname string `json:"nickname,omitempty" gorm:"type:text"`
+	Make     string `json:"make,omitempty" gorm:"type:text"`
+	MakeID   int    `json:"make_id,omitempty" gorm:"type:integer"`
+	Model    string `json:"model,omitempty" gorm:"type:text"`
+	ModelID  int    `json:"model_id,omitempty" gorm:"type:integer"`
+	Year     int    `json:"year,omitempty" gorm:"type:integer"`
+	Vin      string `json:"vin,omitempty" gorm:"type:text"`
+	Lpn      string `json:"lpn,omitempty" gorm:"type:text"`
 }
 
 type Vehicle struct {
@@ -41,6 +41,21 @@ func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return err
 }
+
+func (v *Vehicle) AfterDelete(tx *gorm.DB) (err error) {
+	if err := database.DB.Where("vehicle_id = ?", v.ID).Delete(&MaintenanceRecord{}).Error; err != nil {
+		database.LogError(err)
+		return err
+	}
+
+	if err := database.DB.Where("vehicle_id = ?", v.ID).Delete(&VehicleUserAccess{}).Error; err != nil {
+		database.LogError(err)
+		return err
+	}
+
+	return nil
+}
+
 func (v *Vehicle) CanRead(user User) bool {
 	if v.CreatedBy == user.ID {
 		return true

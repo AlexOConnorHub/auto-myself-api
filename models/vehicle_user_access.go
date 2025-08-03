@@ -8,11 +8,10 @@ import (
 )
 
 type VehicleUserAccessBase struct {
-	Username    string    `json:"username" gorm:"type:text;"`
-	UserID      uuid.UUID `json:"user_id" gorm:"type:uuid;not null"`
-	GrantedUser User      `gorm:"foreignKey:UserID;references:ID;constraint"`
-	VehicleID   uuid.UUID `json:"vehicle_id" gorm:"type:uuid;not null"`
-	CanWrite    bool      `json:"can_write" gorm:"field:write_access;default:false"`
+	Username  string    `json:"username,omitempty" gorm:"type:text;"`
+	UserID    uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null"`
+	VehicleID uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
+	CanWrite  bool      `json:"can_write,omitempty" gorm:"field:write_access;default:false"`
 }
 
 type VehicleUserAccess struct {

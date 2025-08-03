@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-var allUsers = [][]string{
+var AllUsers = [][]string{
 	{"019785fe-4eb4-766e-9c45-bec7780972a2", "User 1"},
 	{"019785fe-4eb4-766e-9c45-c1f83e7c1f1f", "User 2"},
 	{"019785fe-4eb4-766e-9c45-c497f2d9fe9e", "User 3"},
@@ -21,13 +21,37 @@ var allUsers = [][]string{
 	{"019785fe-4eb4-766e-9c45-fc6ed4a7407b", "User 8"},
 }
 
-func TestVerifyAllUsersExist(t *testing.T) {
+var UserAccessMatrix = [8][8]int{
+	{WRITE, READ_ONLY, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, READ_ONLY},
+	{READ_ONLY, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, READ_ONLY},
+	{READ_ONLY, READ_ONLY, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, READ_ONLY},
+	{NO_ACCESS, NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+	{NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+	{NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS, WRITE, READ_ONLY, READ_ONLY},
+	{READ_ONLY, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, WRITE, READ_ONLY},
+	{READ_ONLY, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, READ_ONLY, WRITE},
+}
+
+func validateUserResponse(marshaledResponse models.UserBase, expected models.UserBase) string {
+	if marshaledResponse.Username != expected.Username {
+		return fmt.Sprintf("Expected username to be %s, got %s", expected.Username, marshaledResponse.Username)
+	}
+	return ""
+}
+
+func loadUser(index int) models.UserBase {
+	user := AllUsers[index]
+	return models.UserBase{
+		Username: user[1],
+	}
+}
+
+func TestUsersVerifyAllExist(t *testing.T) {
 	r := setupTest(t)
 
-	// for uuid, expectedUsername := range allUsers {
-	for _, user := range allUsers {
-		uuid := user[0]
-		expectedUsername := user[1]
+	for index, userRow := range AllUsers {
+		uuid := userRow[0]
+		user := loadUser(index)
 
 		w := helpers.PerformRequest(r, "GET", "/user", map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, nil)
 		if w.Code != http.StatusOK {
@@ -36,13 +60,13 @@ func TestVerifyAllUsersExist(t *testing.T) {
 
 		var firstBody = w.Body.String()
 
-		var user models.UserBase
-		if err := json.Unmarshal(w.Body.Bytes(), &user); err != nil {
+		var response models.UserBase
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 			t.Errorf("Failed to unmarshal response: %v", err)
 		}
 
-		if user.Username != expectedUsername {
-			t.Error("Expected username to be", expectedUsername, ", got", user.Username)
+		if errMsg := validateUserResponse(response, user); errMsg != "" {
+			t.Error("User response validation failed:", errMsg)
 		}
 
 		w = helpers.PerformRequest(r, "GET", "/user/"+uuid, map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, nil)
@@ -56,112 +80,67 @@ func TestVerifyAllUsersExist(t *testing.T) {
 	}
 }
 
-func TestModifyUser(t *testing.T) {
+func TestUserPatch(t *testing.T) {
 	r := setupTest(t)
 
-	var testUser = allUsers[0]
-	uuid := testUser[0]
-	initialUsername := testUser[1]
-
-	var testUserModel models.UserBase
-	var userResponse models.UserBase
-
-	testUserModel.Username = initialUsername
-
-	w := helpers.PerformRequest(r, "GET", "/user", map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	userRow := AllUsers[0]
+	uuid := userRow[0]
+	user := loadUser(0)
+	modified := models.UserBase{
+		Username: "MODIFIED " + user.Username,
 	}
+	user.Username = modified.Username
 
-	if err := json.Unmarshal(w.Body.Bytes(), &userResponse); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
-	}
-
-	if userResponse.Username != initialUsername {
-		t.Error("Expected username to be", initialUsername, ", got", userResponse.Username)
-	}
-
-	testUserModel.Username = "MODIFIED " + initialUsername
-
-	bodyBytes, err := json.Marshal(testUserModel)
+	bodyBytes, err := json.Marshal(modified)
 	if err != nil {
 		t.Fatalf("Failed to marshal testUserModel: %v", err)
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
-	w = helpers.PerformRequest(r, "PATCH", "/user", map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, bodyReader)
+	w := helpers.PerformRequest(r, "PATCH", "/user", map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, bodyReader)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
 
-	if err := json.Unmarshal(w.Body.Bytes(), &userResponse); err != nil {
+	var response models.UserBase
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Errorf("Failed to unmarshal response: %v", err)
 	}
 
-	if userResponse.Username != testUserModel.Username {
-		t.Error("Expected username to be", testUserModel.Username, ", got", userResponse.Username)
-	}
-
-	w = helpers.PerformRequest(r, "GET", "/user/"+uuid, map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-	}
-
-	if err := json.Unmarshal(w.Body.Bytes(), &userResponse); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
-	}
-
-	if userResponse.Username != testUserModel.Username {
-		t.Error("Expected username to be", testUserModel.Username, ", got", userResponse.Username)
+	if errMsg := validateUserResponse(response, user); errMsg != "" {
+		t.Error("User response validation failed:", errMsg)
 	}
 }
 
-func TestReadUserPermissions(t *testing.T) {
+func TestUserReadPermissions(t *testing.T) {
 	r := setupTest(t)
-
-	/*
-		Each row is a different user. Each column is the ability of the user to view the profile of the other uesrs.
-		Rules:
-			Vehicle creator can view all who have any access to vehicle
-			Users with access to a vehicle can view users with write access (including vehicle creator)
-	*/
-	readAccessMatrix := [8][8]bool{
-		{true, true, true, false, false, false, true, true},
-		{true, true, false, false, false, false, true, true},
-		{true, true, true, false, false, false, true, true},
-		{false, false, false, true, false, false, false, false},
-		{false, false, false, false, true, false, false, false},
-		{false, false, false, false, false, true, true, true},
-		{true, true, false, false, false, true, true, true},
-		{true, true, false, false, false, true, true, true},
-	}
 
 	var successMatrix [8][8]string
 
-	for authUser, acces := range readAccessMatrix {
-		for readUser, canRead := range acces {
-			auth_uuid := allUsers[authUser][0]
-			read_uuid := allUsers[readUser][0]
-			read_username := allUsers[readUser][1]
+	for authUser, access := range UserAccessMatrix {
+		for readUser, permission := range access {
+			auth_uuid := AllUsers[authUser][0]
+			read_uuid := AllUsers[readUser][0]
+			expected := loadUser(readUser)
 
 			w := helpers.PerformRequest(r, "GET", "/user/"+read_uuid, map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
 			if w.Code == http.StatusOK {
-				if !canRead {
+				if permission == NO_ACCESS {
 					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
 					continue
 				}
-				var userResponse models.UserBase
-				if err := json.Unmarshal(w.Body.Bytes(), &userResponse); err != nil {
+				var response models.UserBase
+				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 					successMatrix[authUser][readUser] = fmt.Sprintf("Failed to unmarshal response: %v", err)
 					continue
 				}
 
-				if userResponse.Username != read_username {
-					successMatrix[authUser][readUser] = fmt.Sprintf("Expected to have username %s, got %s", read_username, userResponse.Username)
+				if errMsg := validateUserResponse(response, expected); errMsg != "" {
+					successMatrix[authUser][readUser] = fmt.Sprintf("User response validation failed: %s", errMsg)
 					continue
 				}
 			} else if w.Code == http.StatusNotFound {
-				if canRead {
+				if permission > NO_ACCESS {
 					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusOK, w.Code)
 					continue
 				}
@@ -175,8 +154,8 @@ func TestReadUserPermissions(t *testing.T) {
 	for authUser, acces := range successMatrix {
 		for readUser, errorMessage := range acces {
 			if errorMessage != "" {
-				authUserName := allUsers[authUser][1]
-				readUserName := allUsers[readUser][1]
+				authUserName := AllUsers[authUser][1]
+				readUserName := AllUsers[readUser][1]
 				t.Errorf("Auth User %s reading User %s: %s", authUserName, readUserName, errorMessage)
 			}
 		}
