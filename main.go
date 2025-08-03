@@ -15,22 +15,22 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
-//	@title									Auto Myself API
-//	@version								1.0
-//	@description							This API is used to store and share vehicle maintenance history.
-//	@termsOfService							https://github.com/AlexOConnorHub/auto-myself-api/blob/main/TERMS_OF_SERVICE.md
+//	@title			Auto Myself API
+//	@version		1.0
+//	@description	This API is used to store and share vehicle maintenance history.
+//	@termsOfService	https://github.com/AlexOConnorHub/auto-myself-api/blob/main/TERMS_OF_SERVICE.md
 
-//	@contact.name							AlexOConnorHub
-//	@contact.url							https://automyself.com
-//	@contact.email							api@automyself.com
+//	@contact.name	AlexOConnorHub
+//	@contact.url	https://automyself.com
+//	@contact.email	api@automyself.com
 
-//	@license.name							CC BY-NC-SA 4.0
-//	@license.url							https://creativecommons.org/licenses/by-nc-sa/4.0/
+//	@license.name	CC BY-NC-SA 4.0
+//	@license.url	https://creativecommons.org/licenses/by-nc-sa/4.0/
 
-//	@servers.url							http://localhost:8080/
-//	@servers.description					Local development server
-//	@servers.url							https://api.automyself.com/v1/
-//	@servers.description					Production server
+//	@servers.url			http://localhost:8080/
+//	@servers.description	Local development server
+//	@servers.url			https://api.automyself.com/v1/
+//	@servers.description	Production server
 
 //	// @securitydefinitions.oauth2.application	OAuth2Application
 //	// @tokenUrl								https://auth0.automyself.com/oauth/token

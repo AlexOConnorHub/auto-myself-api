@@ -96,6 +96,34 @@ func TestVehiclesVerifyAllExist(t *testing.T) {
 	}
 }
 
+func TestVehicleList(t *testing.T) {
+	r := setupTest(t)
+
+	for index, userAccess := range VehicleAccessMatrix {
+		auth_uuid := AllUsers[index][0]
+		expectedVehicleCount := 0
+		for _, access := range userAccess {
+			if access > NO_ACCESS {
+				expectedVehicleCount++
+			}
+		}
+		w := helpers.PerformRequest(r, "GET", "/vehicle", map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d for user %s", http.StatusOK, w.Code, AllUsers[index][1])
+			continue
+		}
+
+		var locations []string
+		if err := json.Unmarshal(w.Body.Bytes(), &locations); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
+
+		if len(locations) != expectedVehicleCount {
+			t.Errorf("Expected %d vehicles, got %d for user %s", expectedVehicleCount, len(locations), AllUsers[index][1])
+		}
+	}
+}
+
 func TestVehiclePost(t *testing.T) {
 	r := setupTest(t)
 
