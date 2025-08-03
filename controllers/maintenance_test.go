@@ -110,6 +110,41 @@ func TestMaintenancesVerifyAllExist(t *testing.T) {
 	}
 }
 
+func TestMaintenanceList(t *testing.T) {
+	r := setupTest(t)
+
+	maintenanceCountHash := make(map[int]int)
+	for _, maintenanceRow := range AllMaintenances {
+		vehicleID := maintenanceRow[1].(int)
+		maintenanceCountHash[vehicleID]++
+	}
+
+	for userIndex, userAccess := range VehicleAccessMatrix {
+		for vehicleIndex, vehicleRow := range AllVehicles {
+			if userAccess[vehicleIndex] < READ_ONLY {
+				continue
+			}
+			auth_uuid := AllUsers[userIndex][0]
+			vehicleID := vehicleRow[0].(string)
+
+			w := helpers.PerformRequest(r, "GET", "/vehicle/"+vehicleID+"/maintenance", map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+			if w.Code != http.StatusOK {
+				t.Errorf("Expected status code %d, got %d for user %s", http.StatusOK, w.Code, AllUsers[userIndex][1])
+				continue
+			}
+
+			var locations []string
+			if err := json.Unmarshal(w.Body.Bytes(), &locations); err != nil {
+				t.Errorf("Failed to unmarshal response: %v", err)
+			}
+
+			if len(locations) != maintenanceCountHash[vehicleIndex] {
+				t.Errorf("Expected %d maintenance records, got %d for user %s", maintenanceCountHash[vehicleIndex], len(locations), AllUsers[userIndex][1])
+			}
+		}
+	}
+}
+
 func TestMaintenancePost(t *testing.T) {
 	r := setupTest(t)
 
