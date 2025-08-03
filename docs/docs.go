@@ -178,7 +178,7 @@ const docTemplate = `{
                         "description": "Unprocessable Entity"
                     }
                 },
-                "summary": "Create maintenance record TODO: ADD HEADER",
+                "summary": "Create maintenance record",
                 "tags": [
                     "Maintenance"
                 ]
@@ -1039,7 +1039,7 @@ const docTemplate = `{
                         "description": "Unprocessable Entity"
                     }
                 },
-                "summary": "Create vehicle TODO: ADD HEADER",
+                "summary": "Create vehicle",
                 "tags": [
                     "Vehicles"
                 ]

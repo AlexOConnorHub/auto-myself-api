@@ -122,7 +122,7 @@ paths:
           description: Created
         "422":
           description: Unprocessable Entity
-      summary: 'Create maintenance record TODO: ADD HEADER'
+      summary: Create maintenance record
       tags:
       - Maintenance
   /maintenance/{uuid}:
@@ -751,7 +751,7 @@ paths:
           description: Created
         "422":
           description: Unprocessable Entity
-      summary: 'Create vehicle TODO: ADD HEADER'
+      summary: Create vehicle
       tags:
       - Vehicles
   /vehicle/{uuid}:
