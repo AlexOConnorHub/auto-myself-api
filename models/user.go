@@ -9,7 +9,7 @@ import (
 )
 
 type UserBase struct {
-	Username string `json:"username" gorm:"type:text;"`
+	Username string `json:"username,omitempty" gorm:"type:text;"`
 }
 
 type User struct {

@@ -68,7 +68,7 @@ func ContextGetUserHeaderMiddleware() gin.HandlerFunc {
 
 		var user = models.User{}
 
-		err = database.DB.Where("id = ?", parsedUUID).First(&user).Error
+		err = database.DB.First(&user, "id = ?", parsedUUID).Error
 
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {

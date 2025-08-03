@@ -9,14 +9,14 @@ import (
 )
 
 type MaintenanceRecordBase struct {
-	Cost         string    `json:"cost" gorm:"type:decimal(10,2)"`
-	Odometer     int       `json:"odometer" gorm:"type:integer"`
-	Timestamp    time.Time `json:"timestamp" gorm:"type:date"`
-	Notes        string    `json:"notes" gorm:"type:text"`
-	Type         string    `json:"type" gorm:"type:text"`
-	Interval     int       `json:"interval" gorm:"type:integer"`
-	IntervalType string    `json:"interval_type" gorm:"type:text"`
-	VehicleID    uuid.UUID `json:"vehicle_id" gorm:"type:uuid;not null"`
+	Cost         string    `json:"cost,omitempty" gorm:"type:decimal(10,2)"`
+	Odometer     int       `json:"odometer,omitempty" gorm:"type:integer"`
+	Timestamp    time.Time `json:"timestamp,omitempty" gorm:"type:date"`
+	Notes        string    `json:"notes,omitempty" gorm:"type:text"`
+	Type         string    `json:"type,omitempty" gorm:"type:text"`
+	Interval     int       `json:"interval,omitempty" gorm:"type:integer"`
+	IntervalType string    `json:"interval_type,omitempty" gorm:"type:text"`
+	VehicleID    uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
 }
 
 type MaintenanceRecord struct {

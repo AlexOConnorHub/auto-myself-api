@@ -71,7 +71,7 @@ func GetAllMaintenance(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
+	err = database.DB.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -194,7 +194,7 @@ func GetMaintenanceByID(c *gin.Context) {
 	}
 
 	var maintenanceRecord models.MaintenanceRecord
-	err = database.DB.Where("id = ?", maintenanceUUID).First(&maintenanceRecord).Error
+	err = database.DB.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -212,7 +212,7 @@ func GetMaintenanceByID(c *gin.Context) {
 	c.JSON(http.StatusOK, maintenanceRecord.MaintenanceRecordBase)
 }
 
-// @Summary Create maintenance record TODO: ADD HEADER
+// @Summary Create maintenance record
 // @Description Create a new maintenance record for a vehicle.
 // @Tags Maintenance
 // @Success 201
@@ -311,7 +311,7 @@ func DeleteMaintenanceByID(c *gin.Context) {
 	}
 
 	var maintenanceRecord models.MaintenanceRecord
-	err = database.DB.Where("id = ?", maintenanceRecordUUID).First(&maintenanceRecord).Error
+	err = database.DB.First(&maintenanceRecord, "id = ?", maintenanceRecordUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -389,7 +389,7 @@ func UpdateMaintenanceByID(c *gin.Context) {
 		},
 	}
 
-	err = database.DB.Where("id = ?", maintenanceUUID).First(&maintenanceRecord).Error
+	err = database.DB.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)

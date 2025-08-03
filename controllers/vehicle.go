@@ -121,7 +121,7 @@ func GetVehicleByID(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
+	err = database.DB.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -138,7 +138,7 @@ func GetVehicleByID(c *gin.Context) {
 	c.JSON(http.StatusOK, vehicle.VehicleBase)
 }
 
-// @Summary Create vehicle TODO: ADD HEADER
+// @Summary Create vehicle
 // @Description Create a vehicle.
 // @Tags Vehicles
 // @Success 201
@@ -237,7 +237,7 @@ func DeleteVehicleByID(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
+	err = database.DB.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -313,7 +313,7 @@ func UpdateVehicleByID(c *gin.Context) {
 		},
 	}
 
-	err = database.DB.Where("id = ?", vehicleUUID).First(&vehicle).Error
+	err = database.DB.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
