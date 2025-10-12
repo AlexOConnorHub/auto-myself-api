@@ -13,6 +13,10 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-appdb}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - EMAIL_FROM=${EMAIL_FROM}
     volumes:
       - .:/app
       - /root/.cache/go-build:/root/.cache/go-build
@@ -22,7 +26,7 @@ services:
         - action: restart
           path: ./
     working_dir: /app
-    entrypoint: ["go", "run", "main.go"]
+    command: ["go", "run", "main.go"]
   postgres:
     image: postgres:15
     environment:

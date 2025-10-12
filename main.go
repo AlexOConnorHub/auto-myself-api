@@ -1,9 +1,11 @@
 package main
 
 import (
+	"auto-myself-api/components"
 	"auto-myself-api/database"
 	"auto-myself-api/routes"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -50,6 +52,53 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	// if err := components.SendEmailRaw("no-reply@automyself.com", "Test email from Auto Myself API", "<h1>This is a test email from the Auto Myself API</h1><p>If you received this email, the email system is working!</p>"); err != nil {
+	// 	log.Fatalf("Error sending test email: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	if err := components.ListTemplates(); err != nil {
+		log.Fatalf("Error listing templates: %v", err)
+	}
+	time.Sleep(time.Second)
+
+	// if err := components.CreateTemplate("confirm_email", "Auto Myself - Confirm your email",
+	// 	"<div><p>Thank you for signing up! Please confirm your email address by entering the code below:</p><h1 style=\"font-size: 36px; font-weight: bold;\">{{code}}</h1><p>If you didn't sign up for this account, you can safely ignore this email.</p></div>"); err != nil {
+	// 	log.Fatalf("Error creating template: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	// if err := components.ListTemplates(); err != nil {
+	// 	log.Fatalf("Error listing templates: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	// if err := components.SendEmailTemplate("no-reply@automyself.com", "confirm_email", `{"code":"123456"}`); err != nil {
+	// 	log.Fatalf("Error sending email: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	// if err := components.UpdateTemplate("test_email", "Auto Myself - Test Email",
+	// 	"<h1>This is a test email from the Auto Myself API</h1><p>If you received this email, the email system is working!</p>"); err != nil {
+	// 	log.Fatalf("Error creating template: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	// if err := components.DeleteTemplate("test_email"); err != nil {
+	// 	log.Fatalf("Error deleting template: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	// if err := components.ListTemplates(); err != nil {
+	// 	log.Fatalf("Error listing templates: %v", err)
+	// }
+	// time.Sleep(time.Second)
+
+	if err := components.SendEmailTemplate("no-reply@automyself.com", "test_email", `{}`); err != nil {
+		log.Fatalf("Error sending email: %v", err)
+	}
+	return
 
 	database.Init()
 
