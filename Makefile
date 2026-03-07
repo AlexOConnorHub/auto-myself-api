@@ -1,4 +1,4 @@
-.PHONY: migrate seed test dev up restart logs  clean run 
+.PHONY: migrate seed test dev start restart logs stop clean run 
 
 ifneq (,$(filter $(MAKECMDGOALS),migrate seed))
   PROVIDED_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -18,7 +18,7 @@ test:
 dev:
 	docker compose up --build --watch api
 
-up:
+start:
 	docker compose up -d
 
 restart:
@@ -27,5 +27,5 @@ restart:
 logs:
 	docker compose logs -f api
 
-down:
+stop:
 	docker compose down

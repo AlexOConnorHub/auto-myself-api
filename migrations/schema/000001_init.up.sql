@@ -18,6 +18,7 @@ CREATE TABLE "vehicle_user_access" (
     "user_id" uuid  NOT NULL,
     "vehicle_id" uuid  NOT NULL,
     "write_access" boolean  NOT NULL DEFAULT false,
+    "pending" boolean  NOT NULL DEFAULT true,
     "created_by" uuid  NOT NULL,
     "created_at" timestamptz  NOT NULL DEFAULT now(),
     "updated_at" timestamptz  NOT NULL DEFAULT now(),
@@ -50,7 +51,7 @@ CREATE TABLE "vehicles" (
     "created_at" timestamptz  NOT NULL DEFAULT now(),
     "updated_at" timestamptz  NOT NULL DEFAULT now(),
     "deleted_at" timestamptz  NULL,
-    CONSTRAINT "id" PRIMARY KEY ("id")
+    CONSTRAINT "vehicle_pk" PRIMARY KEY ("id")
 );
 
 CREATE INDEX "vehicles_idx_1" on "vehicles" ("created_by" ASC);
