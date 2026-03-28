@@ -40,7 +40,7 @@ func InitTest(tb testing.TB) {
 
 	connect(host, user, pass, dbname, port)
 
-	schema_driver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
+	schemaDriver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
 		MigrationsTable: "_schema_migrations",
 	})
 	if err != nil {
@@ -51,7 +51,7 @@ func InitTest(tb testing.TB) {
 
 	m, err := migrate.NewWithDatabaseInstance(
 		"file://"+cwd+"/migrations/schema",
-		"postgres", schema_driver)
+		"postgres", schemaDriver)
 	if err != nil {
 		LogError(err)
 		panic("failed to create migrate instance for schema: " + err.Error())
@@ -63,7 +63,7 @@ func InitTest(tb testing.TB) {
 		}
 	}
 
-	seed_driver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
+	seedDriver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
 		MigrationsTable: "_seed_migrations",
 	})
 	if err != nil {
@@ -73,7 +73,7 @@ func InitTest(tb testing.TB) {
 
 	m, err = migrate.NewWithDatabaseInstance(
 		"file://"+cwd+"/migrations/seed",
-		"postgres", seed_driver)
+		"postgres", seedDriver)
 	if err != nil {
 		LogError(err)
 		panic("failed to create migrate instance for seed: " + err.Error())

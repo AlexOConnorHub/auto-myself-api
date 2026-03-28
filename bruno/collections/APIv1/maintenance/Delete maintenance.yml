@@ -1,0 +1,19 @@
+info:
+  name: Delete maintenance
+  type: http
+  seq: 4
+
+http:
+  method: DELETE
+  url: "{{base_url}}/v1/maintenance/:maintenance_id"
+  params:
+    - name: maintenance_id
+      value: ""
+      type: path
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -31,10 +31,6 @@ func (Vehicle) TableName() string {
 	return "vehicles"
 }
 
-func (v *Vehicle) GetLocation() string {
-	return "/vehicle/" + v.DatabaseMetadata.ID.String()
-}
-
 func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
 	if v.ID.IsNil() {
 		v.DatabaseMetadata.ID, err = uuid.NewV7()
@@ -56,7 +52,7 @@ func (v *Vehicle) AfterDelete(tx *gorm.DB) (err error) {
 	return nil
 }
 
-func (v *Vehicle) CanRead(user User) bool {
+func (v *Vehicle) CanRead(user *User) bool {
 	if v.CreatedBy == user.ID {
 		return true
 	}
@@ -81,7 +77,19 @@ func (v *Vehicle) CanRead(user User) bool {
 	return result.CanRead
 }
 
-func (v *Vehicle) CanWrite(user User) bool {
+func (v *Vehicle) CanPendingRead(user *User) bool {
+	var pendingShare VehicleUserAccessPending
+	if err := database.DB.First(&pendingShare, "vehicle_id = ? AND user_id = ?", v.ID, user.ID).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			database.LogError(err)
+		}
+		return false
+	}
+
+	return pendingShare.ID != uuid.Nil
+}
+
+func (v *Vehicle) CanWrite(user *User) bool {
 	if v.CreatedBy == user.ID {
 		return true
 	}

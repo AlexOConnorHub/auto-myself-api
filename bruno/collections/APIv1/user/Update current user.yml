@@ -1,0 +1,21 @@
+info:
+  name: Update current user
+  type: http
+  seq: 2
+
+http:
+  method: PATCH
+  url: "{{base_url}}/v1/user"
+  body:
+    type: json
+    data: |-
+      {
+        "username": "Updated User 8"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

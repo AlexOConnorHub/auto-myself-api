@@ -37,7 +37,3 @@ func (m *MaintenanceRecord) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return err
 }
-
-func (m *MaintenanceRecord) GetLocation() string {
-	return "/maintenance/" + m.DatabaseMetadata.ID.String()
-}

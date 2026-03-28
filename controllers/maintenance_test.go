@@ -133,13 +133,13 @@ func TestMaintenanceList(t *testing.T) {
 				continue
 			}
 
-			var locations []string
-			if err := json.Unmarshal(w.Body.Bytes(), &locations); err != nil {
+			var ids []string
+			if err := json.Unmarshal(w.Body.Bytes(), &ids); err != nil {
 				t.Errorf("Failed to unmarshal response: %v", err)
 			}
 
-			if len(locations) != maintenanceCountHash[vehicleIndex] {
-				t.Errorf("Expected %d maintenance records, got %d for user %s", maintenanceCountHash[vehicleIndex], len(locations), AllUsers[userIndex][1])
+			if len(ids) != maintenanceCountHash[vehicleIndex] {
+				t.Errorf("Expected %d maintenance records, got %d for user %s", maintenanceCountHash[vehicleIndex], len(ids), AllUsers[userIndex][1])
 			}
 		}
 	}

@@ -1,0 +1,16 @@
+opencollection: 1.0.0
+info:
+  name: "auto-myself-api"
+  type: workspace
+
+collections:
+  - name: "Auth"
+    path: "collections/Auth"
+  - name: "APIv1"
+    path: "collections/APIv1"
+
+specs:
+
+docs: ''
+
+activeEnvironmentUid: 1c8gb1u00000000000000

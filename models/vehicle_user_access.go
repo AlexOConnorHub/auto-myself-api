@@ -10,8 +10,7 @@ import (
 type VehicleUserAccessBase struct {
 	UserID    uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null"`
 	VehicleID uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
-	Pending   bool      `json:"pending,omitempty" gorm:"field:pending;default:true"`
-	CanWrite  bool      `json:"can_write,omitempty" gorm:"field:write_access;default:false"`
+	CanWrite  bool      `json:"can_write" gorm:"field:write_access;default:false"`
 }
 
 type VehicleUserAccess struct {

@@ -2,63 +2,64 @@ package controllers
 
 import (
 	"auto-myself-api/database"
-	"auto-myself-api/helpers"
 	"auto-myself-api/middleware"
 	"testing"
 
-	"github.com/fufuok/favicon"
 	"github.com/gin-gonic/gin"
-
-	_ "auto-myself-api/docs"
-
-	swaggerfiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func SetupRoutes(r *gin.Engine) {
-	switch gin.Mode() {
-	case gin.DebugMode:
-		r.Use(middleware.CORSAllowAllMiddleware())
-		r.Use(middleware.ContextGetUserHeaderMiddleware())
-	case gin.TestMode:
-		r.Use(middleware.ContextGetUserHeaderMiddleware())
-	case gin.ReleaseMode:
+	if gin.Mode() == gin.ReleaseMode {
 		r.Use(middleware.RateLimitMiddleware())
-		r.Use(middleware.ContextGetUserJWTMiddleware())
 	}
 
-	cwd := helpers.GetRelativeRootPath(nil)
-
-	r.Use(favicon.New(favicon.Config{
-		File: cwd + "/favicon.ico",
-	}))
-
-	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
-
-	user := r.Group("/user")
+	auth := r.Group("/auth")
 	{
-		user.GET("", GetCurrentUser)
-		user.PATCH("", UpdateCurrentUser)
-		// user.DELETE("", DeleteCurrentUser)
-		user.GET("/:uuid", GetUserByID)
+		auth.GET("/:provider", LoginWebProvider)
+		auth.GET("/callback/:provider", LoginWebCallback)
+		// auth.POST("/logout", )
+		auth.POST("/exchange/:provider", LoginExchangeProvider)
+		auth.POST("/development", LoginDevelopment)
+		auth.POST("/refresh", Refresh)
 	}
 
-	vehicle := r.Group("/vehicle")
+	v1 := r.Group("/v1")
+	v1.Use(middleware.AuthMiddleware())
 	{
-		vehicle.POST("", CreateVehicle)
-		vehicle.GET("", GetAllVehicles)
-		vehicle.GET("/:uuid", GetVehicleByID)
-		vehicle.GET("/:uuid/maintenance", GetAllMaintenance)
-		vehicle.PATCH("/:uuid", UpdateVehicleByID)
-		vehicle.DELETE("/:uuid", DeleteVehicleByID)
-	}
+		user := v1.Group("/user")
+		{
+			user.GET("", GetCurrentUser)
+			user.PATCH("", UpdateCurrentUser)
+			// user.DELETE("", DeleteCurrentUser)
+			user.GET("/:uuid", GetUserByID)
+		}
 
-	maintenance := r.Group("/maintenance")
-	{
-		maintenance.POST("", CreateMaintenance)
-		maintenance.GET("/:uuid", GetMaintenanceByID)
-		maintenance.PATCH("/:uuid", UpdateMaintenanceByID)
-		maintenance.DELETE("/:uuid", DeleteMaintenanceByID)
+		vehicle := v1.Group("/vehicle")
+		{
+			vehicle.POST("", CreateVehicle)
+			vehicle.GET("", GetAllVehicles)
+			vehicle.GET("/:uuid", GetVehicleByID)
+			vehicle.GET("/:uuid/maintenance", GetAllMaintenance)
+			vehicle.PATCH("/:uuid", UpdateVehicleByID)
+			vehicle.DELETE("/:uuid", DeleteVehicleByID)
+		}
+
+		maintenance := v1.Group("/maintenance")
+		{
+			maintenance.POST("", CreateMaintenance)
+			maintenance.GET("/:uuid", GetMaintenanceByID)
+			maintenance.PATCH("/:uuid", UpdateMaintenanceByID)
+			maintenance.DELETE("/:uuid", DeleteMaintenanceByID)
+		}
+
+		share := v1.Group("/share")
+		{
+			share.GET("", GetAllShares)
+			share.GET("/:uuid", GetShareByID)
+			share.POST("", CreateShare)
+			share.PATCH("/:uuid", AcceptShare)
+			share.DELETE("/:uuid", DeleteShareByID)
+		}
 	}
 }
 

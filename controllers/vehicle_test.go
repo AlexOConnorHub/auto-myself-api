@@ -113,13 +113,13 @@ func TestVehicleList(t *testing.T) {
 			continue
 		}
 
-		var locations []string
-		if err := json.Unmarshal(w.Body.Bytes(), &locations); err != nil {
+		var ids []string
+		if err := json.Unmarshal(w.Body.Bytes(), &ids); err != nil {
 			t.Errorf("Failed to unmarshal response: %v", err)
 		}
 
-		if len(locations) != expectedVehicleCount {
-			t.Errorf("Expected %d vehicles, got %d for user %s", expectedVehicleCount, len(locations), AllUsers[index][1])
+		if len(ids) != expectedVehicleCount {
+			t.Errorf("Expected %d vehicles, got %d for user %s", expectedVehicleCount, len(ids), AllUsers[index][1])
 		}
 	}
 }

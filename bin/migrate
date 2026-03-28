@@ -1,0 +1,15 @@
+#/bin/bash
+source .env
+
+ARGS=("$@")
+if [ ${#ARGS[@]} -eq 0 ]; then
+  ARGS=("up")
+fi
+
+docker run --rm \
+  -v ./migrations/schema:/migrations \
+  --network host \
+  migrate/migrate \
+  -path=/migrations \
+  -database="postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-localhost}:5432/${POSTGRES_DB:-appdb}?sslmode=disable&search_path=public&x-migrations-table=_schema_migrations" \
+  "${ARGS[@]}"

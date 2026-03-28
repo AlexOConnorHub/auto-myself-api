@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      PGPORT: ${POSTGRES_PORT:-5432}
+    ports:
+      - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
+    volumes:
+      - pgdata:/var/lib/postgresql
+  postgres_test:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-postgres_test}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-password_test}
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-appdb_test}
+      PGPORT: ${POSTGRES_TEST_PORT:-5433}
+    ports:
+      - "${POSTGRES_TEST_PORT:-5433}:${POSTGRES_TEST_PORT:-5433}"
+volumes:
+  pgdata:

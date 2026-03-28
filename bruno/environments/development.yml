@@ -1,0 +1,34 @@
+name: development
+variables:
+  - name: base_url
+    value: http://localhost.automyself.com:8080
+  - name: jwt_token
+    value: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhdXRvLW15c2VsZi1hcGkiLCJzdWIiOiIwMTk3ODVmZS00ZWI0LTc2NmUtOWM0NS1iZWM3NzgwOTcyYTIiLCJhdWQiOlsiYXV0by1teXNlbGYtYXBpIl0sImV4cCI6MTc3NDQwNjQ1NiwiaWF0IjoxNzc0NDAyODU2fQ.K56jf7sIjtpStF4J7246ke8FEKaSbvuegtRSDfFU3rU
+  - name: auth_token
+    value: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhdXRvLW15c2VsZi1hcGkiLCJzdWIiOiIwMTk3ODVmZS00ZWI0LTc2NmUtOWM0NS1iZWM3NzgwOTcyYTIiLCJhdWQiOlsiYXV0by1teXNlbGYtYXBpIl0sImV4cCI6MTc3NDY1NDM2MSwiaWF0IjoxNzc0NjUwNzYxfQ.DNjIt3uTlAscZGdSDji9YjjVJoMr0BSWkDefO3ghYU4
+  - name: vehicle_1
+    value: 019785fe-4eb4-766e-9c45-d0b2bb289b82
+  - name: vehicle_2
+    value: 019785fe-4eb4-766e-9c45-d77f41aa8317
+  - name: vehicle_3
+    value: 019785fe-4eb4-766e-9c45-d9cc7ea628c1
+  - name: vehicle_4
+    value: 019785fe-4eb4-766e-9c45-ddfb4b2e7210
+  - name: vehicle_5
+    value: 019785fe-4eb4-766e-9c45-e1af5010246b
+  - name: user_1
+    value: 019785fe-4eb4-766e-9c45-bec7780972a2
+  - name: user_2
+    value: 019785fe-4eb4-766e-9c45-c1f83e7c1f1f
+  - name: user_3
+    value: 019785fe-4eb4-766e-9c45-c497f2d9fe9e
+  - name: user_4
+    value: 019785fe-4eb4-766e-9c45-c8578456b4df
+  - name: user_5
+    value: 019785fe-4eb4-766e-9c45-cec136a9ad6f
+  - name: user_6
+    value: 019785fe-4eb4-766e-9c45-f592a1187d0c
+  - name: user_7
+    value: 019785fe-4eb4-766e-9c45-f9cd4ee5c0b3
+  - name: user_8
+    value: 019785fe-4eb4-766e-9c45-fc6ed4a7407b

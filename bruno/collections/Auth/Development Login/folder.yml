@@ -1,0 +1,15 @@
+info:
+  name: Development Login
+  type: folder
+  seq: 1
+
+request:
+  auth: inherit
+  scripts:
+    - type: after-response
+      code: |-
+        const auth_token = res.getBody().authentication;
+
+        if (auth_token) {
+          bru.setGlobalEnvVar('auth_token', auth_token);
+        }

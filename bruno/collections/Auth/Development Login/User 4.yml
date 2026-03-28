@@ -1,0 +1,21 @@
+info:
+  name: User 4
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{base_url}}/auth/development"
+  body:
+    type: json
+    data: |
+      {
+        "user_id": "{{user_4}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

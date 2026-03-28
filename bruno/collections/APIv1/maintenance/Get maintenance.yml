@@ -1,0 +1,19 @@
+info:
+  name: Get maintenance
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{base_url}}/v1/maintenance/:maintenance_id"
+  params:
+    - name: maintenance_id
+      value: ""
+      type: path
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

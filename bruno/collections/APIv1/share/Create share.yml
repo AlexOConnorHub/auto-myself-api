@@ -1,0 +1,15 @@
+info:
+  name: Create share
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{base_url}}/v1/share"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

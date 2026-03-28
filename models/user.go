@@ -3,8 +3,12 @@ package models
 import (
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
+	"errors"
+	"os"
+	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
 )
 
@@ -15,8 +19,10 @@ type UserBase struct {
 type User struct {
 	helpers.DatabaseMetadata
 	UserBase
-	OwnedVehicles    []Vehicle           `gorm:"foreignKey:CreatedBy;references:ID;constraint"`
-	AccessedVehicles []VehicleUserAccess `gorm:"foreignKey:UserID;references:ID;constraint"`
+	OwnedVehicles                []Vehicle                  `gorm:"foreignKey:CreatedBy;references:ID;constraint" json:"-"`
+	AccessedVehicles             []VehicleUserAccess        `gorm:"foreignKey:UserID;references:ID;constraint" json:"-"`
+	PendingVehicleSharesSent     []VehicleUserAccessPending `gorm:"foreignKey:CreatedBy;references:ID;constraint" json:"-"`
+	PendingVehicleSharesReceived []VehicleUserAccessPending `gorm:"foreignKey:UserID;references:ID;constraint" json:"-"`
 }
 
 func (User) TableName() string {
@@ -28,10 +34,6 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 		u.DatabaseMetadata.ID, err = uuid.NewV7()
 	}
 	return err
-}
-
-func (u *User) GetLocation() string {
-	return "/user/" + u.ID.String()
 }
 
 func (u *User) CanRead(user User) bool {
@@ -74,4 +76,24 @@ func (u *User) CanRead(user User) bool {
 		return false
 	}
 	return result.CanRead
+}
+
+func (u *User) GenerateJWT() (string, error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", errors.New("JWT_SECRET environment variable is not set")
+	}
+
+	now := time.Now()
+
+	claims := jwt.RegisteredClaims{
+		Issuer:    "auto-myself-api",
+		Audience:  jwt.ClaimStrings{"auto-myself-api"},
+		Subject:   u.ID.String(),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }
