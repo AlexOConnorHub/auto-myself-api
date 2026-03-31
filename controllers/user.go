@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"auto-myself-api/app"
 	"auto-myself-api/database"
 	"auto-myself-api/models"
 	"net/http"
@@ -9,14 +10,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// Returns user record by ID
-func GetUserByID(c *gin.Context) {
+func GetUserByID(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
 	uuid := c.Param("uuid")
 
 	var requestedUser models.User
-	if err := database.DB.First(&requestedUser, "id = ?", uuid).Error; err != nil {
+	if err := a.Gorm.First(&requestedUser, "id = ?", uuid).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 			c.Status(http.StatusInternalServerError)
@@ -26,7 +26,7 @@ func GetUserByID(c *gin.Context) {
 		return
 	}
 
-	if !user.CanRead(requestedUser) {
+	if !user.CanRead(a, requestedUser) {
 		c.Status(http.StatusNotFound)
 		return
 	}
@@ -34,8 +34,7 @@ func GetUserByID(c *gin.Context) {
 	c.JSON(http.StatusOK, requestedUser.UserBase)
 }
 
-// Modify current user's record
-func UpdateCurrentUser(c *gin.Context) {
+func UpdateCurrentUser(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	var input models.UserBase
@@ -44,7 +43,7 @@ func UpdateCurrentUser(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Model(&user).Updates(input).Error; err != nil {
+	if err := a.Gorm.Model(&user).Updates(input).Error; err != nil {
 		database.LogError(err)
 		c.Status(http.StatusInternalServerError)
 		return
@@ -53,8 +52,7 @@ func UpdateCurrentUser(c *gin.Context) {
 	c.JSON(http.StatusOK, user.UserBase)
 }
 
-// Get current user's record
-func GetCurrentUser(c *gin.Context) {
+func GetCurrentUser(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	c.JSON(http.StatusOK, user)

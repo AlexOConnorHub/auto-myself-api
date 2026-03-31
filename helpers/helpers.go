@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,32 @@ type DatabaseMetadata struct {
 	ID uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
 }
 
-func PerformRequest(r *gin.Engine, method, path string, headers map[string]string, body io.Reader) *httptest.ResponseRecorder {
+var jwt_collection = make(map[string]string)
+
+func TestRequestAsUser(r *gin.Engine, method, path string, user_id string, body io.Reader) *httptest.ResponseRecorder {
+	bearer, exists := jwt_collection[user_id]
+	if !exists {
+		req, _ := http.NewRequest("POST", "/auth/development", strings.NewReader(`{"user_id":"`+user_id+`"}`))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			panic("Failed to get JWT for user " + user_id)
+		}
+		var response struct {
+			Bearer string `json:"authentication"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			panic("Failed to parse JWT response for user " + user_id + ": " + err.Error())
+		}
+		bearer = response.Bearer
+		jwt_collection[user_id] = bearer
+	}
+
+	headers := map[string]string{
+		"Authorization": bearer,
+		"Content-Type":  "application/json",
+	}
+
 	req, _ := http.NewRequest(method, path, body)
 	w := httptest.NewRecorder()
 

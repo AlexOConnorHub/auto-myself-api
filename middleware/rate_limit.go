@@ -40,34 +40,3 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-/*
-   // Future: Redis-backed limiter (uncomment and complete configuration)
-   var (
-       ctx = context.Background()
-       rdb = redis.NewClient(&redis.Options{
-           Addr: "localhost:6379",
-       })
-   )
-
-   func RedisRateLimitMiddleware() gin.HandlerFunc {
-       return func(c *gin.Context) {
-           ip := c.ClientIP()
-           key := "ratelimit:" + ip
-           count, _ := rdb.Incr(ctx, key).Result()
-
-           if count == 1 {
-               rdb.Expire(ctx, key, time.Minute)
-           }
-
-           if count > 60 {
-               c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-                   "error": "Too many requests",
-               })
-               return
-           }
-
-           c.Next()
-       }
-   }
-*/

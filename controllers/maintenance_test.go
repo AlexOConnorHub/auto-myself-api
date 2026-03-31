@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,12 +89,12 @@ func loadMaintenanceRecord(index int) models.MaintenanceRecordBase {
 }
 
 func TestMaintenancesVerifyAllExist(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	for index, maintenanceRecord := range AllMaintenances {
 		expected := loadMaintenanceRecord(index)
 		vehicleOwnerUUID := AllVehicles[maintenanceRecord[1].(int)][9].(string)
-		w := helpers.PerformRequest(r, "GET", "/maintenance/"+maintenanceRecord[0].(string), map[string]string{"auth_uuid": vehicleOwnerUUID, "content-type": "application/json"}, nil)
+		w := helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/"+maintenanceRecord[0].(string), vehicleOwnerUUID, nil)
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 			continue
@@ -111,7 +112,7 @@ func TestMaintenancesVerifyAllExist(t *testing.T) {
 }
 
 func TestMaintenanceList(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	maintenanceCountHash := make(map[int]int)
 	for _, maintenanceRow := range AllMaintenances {
@@ -124,10 +125,10 @@ func TestMaintenanceList(t *testing.T) {
 			if userAccess[vehicleIndex] < READ_ONLY {
 				continue
 			}
-			auth_uuid := AllUsers[userIndex][0]
+			authUUID := AllUsers[userIndex][0]
 			vehicleID := vehicleRow[0].(string)
 
-			w := helpers.PerformRequest(r, "GET", "/vehicle/"+vehicleID+"/maintenance", map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicleID+"/maintenance", authUUID, nil)
 			if w.Code != http.StatusOK {
 				t.Errorf("Expected status code %d, got %d for user %s", http.StatusOK, w.Code, AllUsers[userIndex][1])
 				continue
@@ -146,7 +147,7 @@ func TestMaintenanceList(t *testing.T) {
 }
 
 func TestMaintenancePost(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	vehicleUUID, err := uuid.FromString(AllVehicles[0][0].(string))
 	if err != nil {
@@ -170,17 +171,74 @@ func TestMaintenancePost(t *testing.T) {
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
-	w := helpers.PerformRequest(r, "POST", "/maintenance", map[string]string{"auth_uuid": AllVehicles[0][9].(string), "content-type": "application/json"}, bodyReader)
+	w := helpers.TestRequestAsUser(r, "POST", "/v1/maintenance", AllVehicles[0][9].(string), bodyReader)
 	if w.Code != http.StatusCreated {
 		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
 	}
 
-	location := w.Header().Get("X-Object-Location")
+	location := w.Header().Get("Location")
 	if location == "" {
-		t.Error("Expected X-Object-Location header to be set, but it was empty")
+		t.Error("Expected Location header to be set, but it was empty")
 	}
 
-	w = helpers.PerformRequest(r, "GET", location, map[string]string{"auth_uuid": AllVehicles[0][9].(string), "content-type": "application/json"}, nil)
+	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil) // TODO
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response models.MaintenanceRecordBase
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
+
+	if errMsg := validateMaintenanceResponse(response, newMaintenance); errMsg != "" {
+		t.Error(errMsg)
+	}
+}
+
+func TestMaintenancePostWithUUID(t *testing.T) {
+	r, _ := setupTest(t)
+
+	vehicleUUID, err := uuid.FromString(AllVehicles[0][0].(string))
+	if err != nil {
+		t.Fatalf("Failed to parse vehicle UUID: %v", err)
+	}
+
+	uuid := "019d4374-c861-795b-8db5-5cbecdd1378e"
+
+	newMaintenance := models.MaintenanceRecordBase{
+		VehicleID:    vehicleUUID,
+		Timestamp:    time.Now(),
+		Odometer:     10000,
+		Notes:        "TEST Initial maintenance",
+		Type:         "TEST Oil Change",
+		Interval:     5000,
+		IntervalType: "miles",
+		Cost:         "100.00",
+	}
+
+	bodyBytes, err := json.Marshal(newMaintenance)
+	if err != nil {
+		t.Fatalf("Failed to marshal modified maintenance record: %v", err)
+	}
+	bodyReader := bytes.NewReader(bodyBytes)
+
+	w := helpers.TestRequestAsUser(r, "POST", "/v1/maintenance/"+uuid, AllVehicles[0][9].(string), bodyReader)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
+	}
+
+	location := w.Header().Get("Location")
+	if location == "" {
+		t.Error("Expected Location header to be set, but it was empty")
+	}
+
+	pathParts := strings.Split(location, "/")
+	if pathParts[len(pathParts)-1] != uuid {
+		t.Errorf("Expected maintenance record ID to be %s, got %s", uuid, pathParts[len(pathParts)-1])
+	}
+
+	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil) // TODO
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
@@ -196,7 +254,7 @@ func TestMaintenancePost(t *testing.T) {
 }
 
 func TestMaintenancePatch(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	expected := loadMaintenanceRecord(0)
 	expected.Notes += " MODIFIED"
@@ -210,7 +268,7 @@ func TestMaintenancePatch(t *testing.T) {
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
-	w := helpers.PerformRequest(r, "PATCH", "/maintenance/"+AllMaintenances[0][0].(string), map[string]string{"auth_uuid": AllVehicles[AllMaintenances[0][1].(int)][9].(string), "content-type": "application/json"}, bodyReader)
+	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/maintenance/"+AllMaintenances[0][0].(string), AllVehicles[AllMaintenances[0][1].(int)][9].(string), bodyReader)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
@@ -226,22 +284,22 @@ func TestMaintenancePatch(t *testing.T) {
 }
 
 func TestMaintenanceDelete(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	maintenanceUUID := AllMaintenances[0][0].(string)
-	w := helpers.PerformRequest(r, "DELETE", "/maintenance/"+maintenanceUUID, map[string]string{"auth_uuid": AllVehicles[AllMaintenances[0][1].(int)][9].(string), "content-type": "application/json"}, nil)
+	w := helpers.TestRequestAsUser(r, "DELETE", "/v1/maintenance/"+maintenanceUUID, AllVehicles[AllMaintenances[0][1].(int)][9].(string), nil)
 	if w.Code != http.StatusNoContent {
 		t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
 	}
 
-	w = helpers.PerformRequest(r, "GET", "/maintenance/"+maintenanceUUID, map[string]string{"auth_uuid": AllVehicles[AllMaintenances[0][1].(int)][9].(string), "content-type": "application/json"}, nil)
+	w = helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/"+maintenanceUUID, AllVehicles[AllMaintenances[0][1].(int)][9].(string), nil)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status code %d after deletion, got %d", http.StatusNotFound, w.Code)
 	}
 }
 
 func TestMaintenanceReadPermissions(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	var errors []string
 
@@ -251,7 +309,7 @@ func TestMaintenanceReadPermissions(t *testing.T) {
 			authUUID := userRow[0]
 			canRead := VehicleAccessMatrix[userIndex][maintenanceRow[1].(int)] >= READ_ONLY
 
-			w := helpers.PerformRequest(r, "GET", "/maintenance/"+maintenanceRow[0].(string), map[string]string{"auth_uuid": authUUID, "content-type": "application/json"}, nil)
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/"+maintenanceRow[0].(string), authUUID, nil)
 			if w.Code == http.StatusOK {
 				if !canRead {
 					errors = append(errors, fmt.Sprintf("User %s should not have read access to maintenance %s but got status %d", authUUID, maintenanceRow[0], w.Code))
@@ -282,7 +340,7 @@ func TestMaintenanceReadPermissions(t *testing.T) {
 }
 
 func TestMaintenanceWritePermissions(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	var errors []string
 
@@ -302,7 +360,7 @@ func TestMaintenanceWritePermissions(t *testing.T) {
 			}
 			bodyReader := bytes.NewReader(bodyBytes)
 
-			w := helpers.PerformRequest(r, "PATCH", "/maintenance/"+maintenanceRow[0].(string), map[string]string{"auth_uuid": authUUID, "content-type": "application/json"}, bodyReader)
+			w := helpers.TestRequestAsUser(r, "PATCH", "/v1/maintenance/"+maintenanceRow[0].(string), authUUID, bodyReader)
 			if w.Code == http.StatusOK {
 				if permission < WRITE {
 					errors = append(errors, fmt.Sprintf("User %s should not have write access to maintenance %s but got status %d", userRow[1], maintenanceRow[4], w.Code))

@@ -19,5 +19,42 @@ services:
       PGPORT: ${POSTGRES_TEST_PORT:-5433}
     ports:
       - "${POSTGRES_TEST_PORT:-5433}:${POSTGRES_TEST_PORT:-5433}"
+  garage_s3:
+    image: dxflrs/garage:v2.2.0
+    volumes:
+      - s3meta:/var/lib/garage/meta
+      - s3data:/var/lib/garage/data
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+    configs:
+      - source: garage.toml
+        target: /etc/garage.toml
+    network_mode: "host"
 volumes:
   pgdata:
+  s3meta:
+  s3data:
+configs:
+  garage.toml:
+    content: |
+      metadata_dir = "/var/lib/garage/meta"
+      data_dir = "/var/lib/garage/data"
+      db_engine = "lmdb"
+      metadata_auto_snapshot_interval = "6h"
+
+      replication_factor = 1
+
+      compression_level = 2
+
+      rpc_bind_addr = "127.0.0.1:3901"
+      rpc_public_addr = "127.0.0.1:3901"
+      rpc_secret = "1ff229739ecb2da2bdd80a5fb4ddac2e63ad35b2020b8faef962b95903485148"
+
+      [s3_api]
+      s3_region = "garage"
+      api_bind_addr = "127.0.0.1:3900"
+
+      [s3_web]
+      bind_addr = "127.0.0.1:3902"

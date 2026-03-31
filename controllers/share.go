@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"auto-myself-api/app"
 	"auto-myself-api/database"
 	"auto-myself-api/models"
 	"net/http"
@@ -9,18 +10,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// Get all shares for the current user
-func GetAllShares(c *gin.Context) {
+func GetAllShares(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
 	var shareIds []string
-	database.DB.Model(&user).Association("PendingVehicleSharesReceived").Find(&user.PendingVehicleSharesReceived)
+	a.Gorm.Model(&user).Association("PendingVehicleSharesReceived").Find(&user.PendingVehicleSharesReceived)
 
 	for _, share := range user.PendingVehicleSharesReceived {
 		shareIds = append(shareIds, share.ID.String())
 	}
 
-	database.DB.Model(&user).Association("PendingVehicleSharesSent").Find(&user.PendingVehicleSharesSent)
+	a.Gorm.Model(&user).Association("PendingVehicleSharesSent").Find(&user.PendingVehicleSharesSent)
 
 	for _, share := range user.PendingVehicleSharesSent {
 		shareIds = append(shareIds, share.ID.String())
@@ -29,11 +29,11 @@ func GetAllShares(c *gin.Context) {
 	c.JSON(http.StatusOK, shareIds)
 }
 
-func GetShareByID(c *gin.Context) {
+func GetShareByID(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
 	var share models.VehicleUserAccessPending
-	if err := database.DB.First(&share, "id = ?", c.Param("uuid")).Error; err != nil {
+	if err := a.Gorm.First(&share, "id = ?", c.Param("uuid")).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			c.Status(http.StatusInternalServerError)
 		} else {
@@ -50,8 +50,7 @@ func GetShareByID(c *gin.Context) {
 	c.JSON(http.StatusOK, share.VehicleUserAccessBase)
 }
 
-// Create a share
-func CreateShare(c *gin.Context) {
+func CreateShare(c *gin.Context, a *app.App) {
 	var share models.VehicleUserAccessBase
 	if err := c.ShouldBindJSON(&share); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -62,7 +61,7 @@ func CreateShare(c *gin.Context) {
 		VehicleUserAccessBase: share,
 	}
 
-	if err := database.DB.Create(&record).Error; err != nil {
+	if err := a.Gorm.Create(&record).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -70,8 +69,7 @@ func CreateShare(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
-// Accept a share
-func AcceptShare(c *gin.Context) {
+func AcceptShare(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 	var share models.VehicleUserAccessPending
 	if err := c.ShouldBindJSON(&share); err != nil {
@@ -89,28 +87,27 @@ func AcceptShare(c *gin.Context) {
 		CreatedBy:             share.UserID,
 	}
 
-	if err := database.DB.Create(&access).Error; err != nil {
+	if err := a.Gorm.Create(&access).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := database.DB.Delete(&share).Error; err != nil {
+	if err := a.Gorm.Delete(&share).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	database.DB.Model(&access).Association("Vehicle").Find(&access.Vehicle)
+	a.Gorm.Model(&access).Association("Vehicle").Find(&access.Vehicle)
 
 	c.Header("Location", "/v1/share/"+access.Vehicle.ID.String())
 	c.Status(http.StatusNoContent)
 }
 
-// Delete a share
-func DeleteShareByID(c *gin.Context) {
+func DeleteShareByID(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
 	var share models.VehicleUserAccessPending
-	if err := database.DB.First(&share, "id = ?", c.Param("uuid")).Error; err != nil {
+	if err := a.Gorm.First(&share, "id = ?", c.Param("uuid")).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 			c.Status(http.StatusInternalServerError)
@@ -125,7 +122,7 @@ func DeleteShareByID(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Delete(&share).Error; err != nil {
+	if err := a.Gorm.Delete(&share).Error; err != nil {
 		database.LogError(err)
 		c.Status(http.StatusInternalServerError)
 		return

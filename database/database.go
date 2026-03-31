@@ -2,12 +2,16 @@ package database
 
 import (
 	"auto-myself-api/helpers"
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"runtime"
 	"testing"
 
+	_ "github.com/joho/godotenv/autoload"
+
+	"cloud.google.com/go/storage"
 	"github.com/golang-migrate/migrate/v4"
 	migrate_postgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -15,38 +19,88 @@ import (
 	"gorm.io/gorm"
 )
 
-var DB *gorm.DB
-var sqlDB *sql.DB
-
-func Init() {
+func ConnectDB() *sql.DB {
 	user := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	host := os.Getenv("POSTGRES_HOST")
 	port := os.Getenv("POSTGRES_PORT")
 	dbname := os.Getenv("POSTGRES_DB")
 
-	connect(host, user, pass, dbname, port)
+	return connect(host, user, pass, dbname, port)
 }
 
-func InitTest(tb testing.TB) {
+func connect(host, user, pass, dbname, port string) *sql.DB {
+	var err error
+
+	dsn := fmt.Sprintf("host=%s user=%s dbname=%s password=%s port=%s sslmode=disable",
+		host, user, dbname, pass, port)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		LogError(err)
+		panic("failed to connect to the database: " + err.Error())
+	}
+	if err = db.Ping(); err != nil {
+		LogError(err)
+		panic("failed to ping the database: " + err.Error())
+	}
+
+	return db
+}
+
+func ConnectGorm(db *sql.DB) *gorm.DB {
+	Gorm, err := gorm.Open(gorm_postgres.New(gorm_postgres.Config{
+		Conn: db,
+	}), &gorm.Config{})
+
+	if err != nil {
+		LogError(err)
+		panic("failed to initialize gorm: " + err.Error())
+	}
+	return Gorm
+}
+
+func ConnectGoogleClient() *storage.Client {
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		LogError(err)
+		panic("failed to create Google Cloud Storage client: " + err.Error())
+	}
+	return client
+}
+
+func LogError(err error) {
+	_, file, line, _ := runtime.Caller(1)
+	fmt.Printf("%s:%d: Database error: %s\n", file, line, err.Error())
+}
+
+func TestConnectDB(tb testing.TB) *sql.DB {
 	if tb != nil {
 		tb.Helper()
 	}
+
 	user := os.Getenv("POSTGRES_TEST_USER")
 	pass := os.Getenv("POSTGRES_TEST_PASSWORD")
 	host := os.Getenv("POSTGRES_TEST_HOST")
 	port := os.Getenv("POSTGRES_TEST_PORT")
 	dbname := os.Getenv("POSTGRES_TEST_DB")
 
-	connect(host, user, pass, dbname, port)
+	return connect(host, user, pass, dbname, port)
+}
 
-	schemaDriver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
+func MigrateDB(tb testing.TB, db *sql.DB) {
+	if tb != nil {
+		tb.Helper()
+	}
+
+	schemaDriver, err := migrate_postgres.WithInstance(db, &migrate_postgres.Config{
 		MigrationsTable: "_schema_migrations",
 	})
 	if err != nil {
 		LogError(err)
 		panic("failed to create schema driver: " + err.Error())
 	}
+
 	cwd := helpers.GetRelativeRootPath(tb)
 
 	m, err := migrate.NewWithDatabaseInstance(
@@ -62,16 +116,23 @@ func InitTest(tb testing.TB) {
 			panic("failed to migrate schema: " + err.Error())
 		}
 	}
+}
 
-	seedDriver, err := migrate_postgres.WithInstance(sqlDB, &migrate_postgres.Config{
+func ReseedDB(tb testing.TB, db *sql.DB) {
+	if tb != nil {
+		tb.Helper()
+	}
+
+	seedDriver, err := migrate_postgres.WithInstance(db, &migrate_postgres.Config{
 		MigrationsTable: "_seed_migrations",
 	})
 	if err != nil {
 		LogError(err)
 		panic("failed to create seed driver: " + err.Error())
 	}
+	cwd := helpers.GetRelativeRootPath(tb)
 
-	m, err = migrate.NewWithDatabaseInstance(
+	m, err := migrate.NewWithDatabaseInstance(
 		"file://"+cwd+"/migrations/seed",
 		"postgres", seedDriver)
 	if err != nil {
@@ -90,37 +151,4 @@ func InitTest(tb testing.TB) {
 			panic("failed to migrate seed: " + err.Error())
 		}
 	}
-}
-
-func connect(host, user, pass, dbname, port string) {
-	var err error
-
-	if host == "" {
-		host = "localhost"
-	}
-	if port == "" {
-		port = "5432"
-	}
-
-	dsn := fmt.Sprintf("host=%s user=%s dbname=%s password=%s port=%s sslmode=disable",
-		host, user, dbname, pass, port)
-	sqlDB, err = sql.Open("pgx", dsn)
-	if err != nil {
-		LogError(err)
-		panic("failed to connect to the database: " + err.Error())
-	}
-
-	DB, err = gorm.Open(gorm_postgres.New(gorm_postgres.Config{
-		Conn: sqlDB,
-	}), &gorm.Config{})
-
-	if err != nil {
-		LogError(err)
-		panic("failed to initialize gorm: " + err.Error())
-	}
-}
-
-func LogError(err error) {
-	_, file, line, _ := runtime.Caller(1)
-	fmt.Printf("%s:%d: Database error: %s\n", file, line, err.Error())
 }

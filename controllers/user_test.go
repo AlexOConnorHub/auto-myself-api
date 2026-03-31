@@ -47,13 +47,13 @@ func loadUser(index int) models.UserBase {
 }
 
 func TestUsersVerifyAllExist(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	for index, userRow := range AllUsers {
 		uuid := userRow[0]
 		user := loadUser(index)
 
-		w := helpers.PerformRequest(r, "GET", "/user", map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, nil)
+		w := helpers.TestRequestAsUser(r, "GET", "/v1/user", uuid, nil)
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 		}
@@ -62,26 +62,26 @@ func TestUsersVerifyAllExist(t *testing.T) {
 
 		var response models.UserBase
 		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-			t.Errorf("Failed to unmarshal response: %v", err)
+			t.Errorf("Failed to unmarshal response: %v. Body: %s", err, w.Body.String())
 		}
 
 		if errMsg := validateUserResponse(response, user); errMsg != "" {
 			t.Error("User response validation failed:", errMsg)
 		}
 
-		w = helpers.PerformRequest(r, "GET", "/user/"+uuid, map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, nil)
+		w = helpers.TestRequestAsUser(r, "GET", "/v1/user/"+uuid, uuid, nil)
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 		}
 
-		if w.Body.String() != firstBody {
-			t.Error("/user/" + uuid + " endpoint: Expected response body to be the same as /user endpoint")
+		if w.Body.String() == firstBody {
+			t.Error("User accessing own data should be different than accessing via by uuid endpoint")
 		}
 	}
 }
 
 func TestUserPatch(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	userRow := AllUsers[0]
 	uuid := userRow[0]
@@ -97,7 +97,7 @@ func TestUserPatch(t *testing.T) {
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
-	w := helpers.PerformRequest(r, "PATCH", "/user", map[string]string{"auth_uuid": uuid, "content-type": "application/json"}, bodyReader)
+	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/user", uuid, bodyReader)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
@@ -113,17 +113,17 @@ func TestUserPatch(t *testing.T) {
 }
 
 func TestUserReadPermissions(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	var successMatrix [8][8]string
 
 	for authUser, access := range UserAccessMatrix {
 		for readUser, permission := range access {
-			auth_uuid := AllUsers[authUser][0]
+			authUUID := AllUsers[authUser][0]
 			read_uuid := AllUsers[readUser][0]
 			expected := loadUser(readUser)
 
-			w := helpers.PerformRequest(r, "GET", "/user/"+read_uuid, map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/user/"+read_uuid, authUUID, nil)
 			if w.Code == http.StatusOK {
 				if permission == NO_ACCESS {
 					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
@@ -145,7 +145,7 @@ func TestUserReadPermissions(t *testing.T) {
 					continue
 				}
 			} else {
-				successMatrix[authUser][readUser] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, auth_uuid, read_uuid)
+				successMatrix[authUser][readUser] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, read_uuid)
 				continue
 			}
 		}

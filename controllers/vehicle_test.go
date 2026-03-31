@@ -1,13 +1,13 @@
 package controllers
 
 import (
-	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 	"auto-myself-api/models"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -26,7 +26,7 @@ var VehicleAccessMatrix = [8][5]int{
 	{NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS},
 	{NO_ACCESS, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS},
 	{NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS},
-	{NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+	{READ_BY_INVITE, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS},
 	{NO_ACCESS, NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS},
 	{NO_ACCESS, WRITE, NO_ACCESS, WRITE, NO_ACCESS},
 	{NO_ACCESS, WRITE, NO_ACCESS, READ_ONLY, WRITE},
@@ -75,11 +75,11 @@ func loadVehicle(index int) models.VehicleBase {
 }
 
 func TestVehiclesVerifyAllExist(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	for index, vehicle := range AllVehicles {
 		expected := loadVehicle(index)
-		w := helpers.PerformRequest(r, "GET", "/vehicle/"+vehicle[0].(string), map[string]string{"auth_uuid": vehicle[9].(string), "content-type": "application/json"}, nil)
+		w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicle[0].(string), vehicle[9].(string), nil)
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 			continue
@@ -97,17 +97,17 @@ func TestVehiclesVerifyAllExist(t *testing.T) {
 }
 
 func TestVehicleList(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	for index, userAccess := range VehicleAccessMatrix {
-		auth_uuid := AllUsers[index][0]
+		authUUID := AllUsers[index][0]
 		expectedVehicleCount := 0
 		for _, access := range userAccess {
-			if access > NO_ACCESS {
+			if access > READ_BY_INVITE {
 				expectedVehicleCount++
 			}
 		}
-		w := helpers.PerformRequest(r, "GET", "/vehicle", map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+		w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle", authUUID, nil)
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d for user %s", http.StatusOK, w.Code, AllUsers[index][1])
 			continue
@@ -125,7 +125,7 @@ func TestVehicleList(t *testing.T) {
 }
 
 func TestVehiclePost(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	newVehicle := models.VehicleBase{
 		Nickname: "New Vehicle",
@@ -142,17 +142,67 @@ func TestVehiclePost(t *testing.T) {
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
-	w := helpers.PerformRequest(r, "POST", "/vehicle", map[string]string{"auth_uuid": AllUsers[0][0], "content-type": "application/json"}, bodyReader)
+	w := helpers.TestRequestAsUser(r, "POST", "/v1/vehicle", AllUsers[0][0], bodyReader)
 	if w.Code != http.StatusCreated {
 		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
 	}
 
-	location := w.Header().Get("X-Object-Location")
+	location := w.Header().Get("Location")
 	if location == "" {
-		t.Error("Expected X-Object-Location header to be set, but it was empty")
+		t.Error("Expected Location header to be set, but it was empty")
 	}
 
-	w = helpers.PerformRequest(r, "GET", location, map[string]string{"auth_uuid": AllUsers[0][0], "content-type": "application/json"}, nil)
+	w = helpers.TestRequestAsUser(r, "GET", location, AllUsers[0][0], nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var vehicleResponse models.VehicleBase
+	if err := json.Unmarshal(w.Body.Bytes(), &vehicleResponse); err != nil {
+		t.Errorf("Failed to unmarshal response: %v \n%s", err, w.Body.String())
+	}
+
+	if errMsg := validateVehicleResponse(vehicleResponse, newVehicle); errMsg != "" {
+		t.Error(errMsg)
+	}
+}
+
+func TestVehiclePostWithUUID(t *testing.T) {
+	r, _ := setupTest(t)
+
+	uuid := "019d437c-5f48-753b-8240-5263972f15f0"
+
+	newVehicle := models.VehicleBase{
+		Nickname: "New Vehicle",
+		Year:     2022,
+		Make:     "TEST-Make",
+		Model:    "TEST-Model",
+		Vin:      "VIN-TEST-1234567890",
+		Lpn:      "LPN-TEST-1234",
+	}
+
+	bodyBytes, err := json.Marshal(newVehicle)
+	if err != nil {
+		t.Fatalf("Failed to marshal new vehicle: %v", err)
+	}
+	bodyReader := bytes.NewReader(bodyBytes)
+
+	w := helpers.TestRequestAsUser(r, "POST", "/v1/vehicle/"+uuid, AllUsers[0][0], bodyReader)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
+	}
+
+	location := w.Header().Get("Location")
+	if location == "" {
+		t.Error("Expected Location header to be set, but it was empty")
+	}
+
+	pathParts := strings.Split(location, "/")
+	if pathParts[len(pathParts)-1] != uuid {
+		t.Errorf("Expected vehicle ID to be %s, got %s", uuid, pathParts[len(pathParts)-1])
+	}
+
+	w = helpers.TestRequestAsUser(r, "GET", location, AllUsers[0][0], nil)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
@@ -168,10 +218,10 @@ func TestVehiclePost(t *testing.T) {
 }
 
 func TestVehiclePatch(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	var testVehicle = AllVehicles[0]
-	auth_uuid := testVehicle[9].(string)
+	authUUID := testVehicle[9].(string)
 	expected := loadVehicle(0)
 	expected.Nickname = "MODIFIED " + expected.Nickname
 	modified := models.VehicleBase{
@@ -184,7 +234,7 @@ func TestVehiclePatch(t *testing.T) {
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
-	w := helpers.PerformRequest(r, "PATCH", "/vehicle/"+testVehicle[0].(string), map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, bodyReader)
+	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/vehicle/"+testVehicle[0].(string), authUUID, bodyReader)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
@@ -200,47 +250,47 @@ func TestVehiclePatch(t *testing.T) {
 }
 
 func TestVehicleDelete(t *testing.T) {
-	r := setupTest(t)
+	r, a := setupTest(t)
 
 	var testVehicle = AllVehicles[0]
-	auth_uuid := testVehicle[9].(string)
+	authUUID := testVehicle[9].(string)
 
-	w := helpers.PerformRequest(r, "DELETE", "/vehicle/"+testVehicle[0].(string), map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+	w := helpers.TestRequestAsUser(r, "DELETE", "/v1/vehicle/"+testVehicle[0].(string), authUUID, nil)
 	if w.Code != http.StatusNoContent {
 		t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
 	}
 
-	w = helpers.PerformRequest(r, "GET", "/vehicle/"+testVehicle[0].(string), map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+	w = helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+testVehicle[0].(string), authUUID, nil)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status code %d for deleted vehicle, got %d", http.StatusNotFound, w.Code)
 	}
 
-	if err := database.DB.First(&models.Vehicle{}, "id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
+	if err := a.Gorm.First(&models.Vehicle{}, "id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
 		t.Error("Expected vehicle to be deleted, but found it in the database")
 	}
 
-	if err := database.DB.First(&models.MaintenanceRecord{}, "vehicle_id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
+	if err := a.Gorm.First(&models.MaintenanceRecord{}, "vehicle_id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
 		t.Error("Expected no maintenance records after vehicle deletion, but found some")
 	}
 
-	if err := database.DB.First(&models.VehicleUserAccess{}, "vehicle_id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
+	if err := a.Gorm.First(&models.VehicleUserAccess{}, "vehicle_id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
 		t.Error("Expected no vehicle user access records after deletion, but found some")
 	}
 
 }
 
 func TestVehicleReadPermissions(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	var successMatrix [8][5]string
 
 	for userIndex, accessRow := range VehicleAccessMatrix {
 		for vehicleIndex, access := range accessRow {
-			auth_uuid := AllUsers[userIndex][0]
+			authUUID := AllUsers[userIndex][0]
 			vehicle := AllVehicles[vehicleIndex]
 			expected := loadVehicle(vehicleIndex)
 
-			w := helpers.PerformRequest(r, "GET", "/vehicle/"+vehicle[0].(string), map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, nil)
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicle[0].(string), authUUID, nil)
 			if w.Code == http.StatusOK {
 				if access == NO_ACCESS {
 					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
@@ -262,7 +312,7 @@ func TestVehicleReadPermissions(t *testing.T) {
 					continue
 				}
 			} else {
-				successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, auth_uuid, vehicle[0].(string))
+				successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, vehicle[0].(string))
 				continue
 			}
 		}
@@ -280,13 +330,13 @@ func TestVehicleReadPermissions(t *testing.T) {
 }
 
 func TestVehicleWritePermissions(t *testing.T) {
-	r := setupTest(t)
+	r, _ := setupTest(t)
 
 	var successMatrix [8][5]string
 
 	for userIndex, accessRow := range VehicleAccessMatrix {
 		for vehicleIndex, access := range accessRow {
-			auth_uuid := AllUsers[userIndex][0]
+			authUUID := AllUsers[userIndex][0]
 			vehicle := AllVehicles[vehicleIndex]
 			expected := models.VehicleBase{
 				Nickname: "MODIFIED " + vehicle[1].(string),
@@ -308,7 +358,7 @@ func TestVehicleWritePermissions(t *testing.T) {
 			}
 			bodyReader := bytes.NewReader(bodyBytes)
 
-			w := helpers.PerformRequest(r, "PATCH", "/vehicle/"+vehicle[0].(string), map[string]string{"auth_uuid": auth_uuid, "content-type": "application/json"}, bodyReader)
+			w := helpers.TestRequestAsUser(r, "PATCH", "/v1/vehicle/"+vehicle[0].(string), authUUID, bodyReader)
 			if w.Code == http.StatusOK {
 				if access < WRITE {
 					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
@@ -335,7 +385,7 @@ func TestVehicleWritePermissions(t *testing.T) {
 					continue
 				}
 			} else {
-				successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, auth_uuid, vehicle[0].(string))
+				successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, vehicle[0].(string))
 				continue
 			}
 		}

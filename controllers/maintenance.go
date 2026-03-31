@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"auto-myself-api/app"
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 	"auto-myself-api/models"
@@ -12,8 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Get maintenance
-func GetAllMaintenance(c *gin.Context) {
+func GetAllMaintenance(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
@@ -24,7 +24,7 @@ func GetAllMaintenance(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	err = database.DB.First(&vehicle, "id = ?", vehicleUUID).Error
+	err = a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -33,14 +33,14 @@ func GetAllMaintenance(c *gin.Context) {
 		return
 	}
 
-	if !vehicle.CanRead(user) {
+	if !vehicle.CanRead(a, user) {
 		c.Status(http.StatusNotFound)
 		return
 	}
 
 	var maintenanceIdss []string
 
-	database.DB.Model(&vehicle).Association("MaintenanceRecords").Find(&vehicle.MaintenanceRecords)
+	a.Gorm.Model(&vehicle).Association("MaintenanceRecords").Find(&vehicle.MaintenanceRecords)
 
 	for _, MaintenanceRecord := range vehicle.MaintenanceRecords {
 		maintenanceIdss = append(maintenanceIdss, MaintenanceRecord.ID.String())
@@ -49,8 +49,7 @@ func GetAllMaintenance(c *gin.Context) {
 	c.JSON(http.StatusOK, maintenanceIdss)
 }
 
-// Get maintenance record
-func GetMaintenanceByID(c *gin.Context) {
+func GetMaintenanceByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	maintenanceUUID, err := uuid.FromString(c.Param("uuid"))
@@ -61,7 +60,7 @@ func GetMaintenanceByID(c *gin.Context) {
 	}
 
 	var maintenanceRecord models.MaintenanceRecord
-	err = database.DB.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
+	err = a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -69,9 +68,9 @@ func GetMaintenanceByID(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	database.DB.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
+	a.Gorm.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
 
-	if !maintenanceRecord.Vehicle.CanRead(user) {
+	if !maintenanceRecord.Vehicle.CanRead(a, user) {
 		c.Status(http.StatusNotFound)
 		return
 	}
@@ -79,8 +78,7 @@ func GetMaintenanceByID(c *gin.Context) {
 	c.JSON(http.StatusOK, maintenanceRecord.MaintenanceRecordBase)
 }
 
-// Create maintenance record
-func CreateMaintenance(c *gin.Context) {
+func CreateMaintenance(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	var newMaintenanceRecord models.MaintenanceRecord
@@ -91,7 +89,17 @@ func CreateMaintenance(c *gin.Context) {
 
 	newMaintenanceRecord.CreatedBy = user.ID
 
-	if err := database.DB.Create(&newMaintenanceRecord).Error; err != nil {
+	userProvidedUUID := c.Param("uuid")
+	if userProvidedUUID != "" {
+		UUID, err := uuid.FromString(userProvidedUUID)
+		if err != nil {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+		newMaintenanceRecord.ID = UUID
+	}
+
+	if err := a.Gorm.Create(&newMaintenanceRecord).Error; err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -100,8 +108,7 @@ func CreateMaintenance(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
-// Delete maintenance record
-func DeleteMaintenanceByID(c *gin.Context) {
+func DeleteMaintenanceByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	maintenanceRecordUUID, err := uuid.FromString(c.Param("uuid"))
@@ -112,7 +119,7 @@ func DeleteMaintenanceByID(c *gin.Context) {
 	}
 
 	var maintenanceRecord models.MaintenanceRecord
-	err = database.DB.First(&maintenanceRecord, "id = ?", maintenanceRecordUUID).Error
+	err = a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceRecordUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -122,11 +129,11 @@ func DeleteMaintenanceByID(c *gin.Context) {
 		}
 		return
 	}
-	database.DB.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
+	a.Gorm.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
 
 	if maintenanceRecord.Vehicle.CreatedBy != user.ID ||
 		(maintenanceRecord.CreatedAt.Add(time.Hour*24).After(time.Now()) && maintenanceRecord.CreatedBy != user.ID) {
-		if maintenanceRecord.Vehicle.CanRead(user) {
+		if maintenanceRecord.Vehicle.CanRead(a, user) {
 			c.Status(http.StatusForbidden)
 		} else {
 			c.Status(http.StatusNotFound)
@@ -134,7 +141,7 @@ func DeleteMaintenanceByID(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Delete(&maintenanceRecord).Error; err != nil {
+	if err := a.Gorm.Delete(&maintenanceRecord).Error; err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -142,8 +149,7 @@ func DeleteMaintenanceByID(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// Update maintenance record
-func UpdateMaintenanceByID(c *gin.Context) {
+func UpdateMaintenanceByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
 	maintenanceUUID, err := uuid.FromString(c.Param("uuid"))
@@ -159,7 +165,7 @@ func UpdateMaintenanceByID(c *gin.Context) {
 		},
 	}
 
-	err = database.DB.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
+	err = a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -169,10 +175,10 @@ func UpdateMaintenanceByID(c *gin.Context) {
 		}
 		return
 	}
-	database.DB.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
+	a.Gorm.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
 
-	if !maintenanceRecord.Vehicle.CanWrite(user) {
-		if maintenanceRecord.Vehicle.CanRead(user) {
+	if !maintenanceRecord.Vehicle.CanWrite(a, user) {
+		if maintenanceRecord.Vehicle.CanRead(a, user) {
 			c.Status(http.StatusForbidden)
 		} else {
 			c.Status(http.StatusNotFound)
@@ -186,7 +192,7 @@ func UpdateMaintenanceByID(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Model(&maintenanceRecord).Updates(input).Error; err != nil {
+	if err := a.Gorm.Model(&maintenanceRecord).Updates(input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update maintenance record"})
 		return
 	}

@@ -1,11 +1,14 @@
 package models
 
 import (
+	"auto-myself-api/app"
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 	"errors"
 	"os"
 	"time"
+
+	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
@@ -36,7 +39,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	return err
 }
 
-func (u *User) CanRead(user User) bool {
+func (u *User) CanRead(a *app.App, user User) bool {
 	if u.ID == user.ID {
 		return true
 	}
@@ -46,7 +49,7 @@ func (u *User) CanRead(user User) bool {
 	}
 	var result Result
 
-	err := database.DB.Raw(`
+	err := a.Gorm.Raw(`
 	SELECT true AS can_read
 	FROM vehicles V
 	LEFT JOIN vehicle_user_access A ON V.id = A.vehicle_id
@@ -79,9 +82,9 @@ func (u *User) CanRead(user User) bool {
 }
 
 func (u *User) GenerateJWT() (string, error) {
-	secret := os.Getenv("JWT_SECRET")
+	secret := os.Getenv("JWT_SIGNING_SECRET")
 	if secret == "" {
-		return "", errors.New("JWT_SECRET environment variable is not set")
+		return "", errors.New("JWT_SIGNING_SECRET environment variable is not set")
 	}
 
 	now := time.Now()

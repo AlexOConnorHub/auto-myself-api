@@ -1,6 +1,7 @@
 package models
 
 import (
+	"auto-myself-api/app"
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 
@@ -39,12 +40,12 @@ func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 func (v *Vehicle) AfterDelete(tx *gorm.DB) (err error) {
-	if err := database.DB.Where("vehicle_id = ?", v.ID).Delete(&MaintenanceRecord{}).Error; err != nil {
+	if err := tx.Where("vehicle_id = ?", v.ID).Delete(&MaintenanceRecord{}).Error; err != nil {
 		database.LogError(err)
 		return err
 	}
 
-	if err := database.DB.Where("vehicle_id = ?", v.ID).Delete(&VehicleUserAccess{}).Error; err != nil {
+	if err := tx.Where("vehicle_id = ?", v.ID).Delete(&VehicleUserAccess{}).Error; err != nil {
 		database.LogError(err)
 		return err
 	}
@@ -52,7 +53,7 @@ func (v *Vehicle) AfterDelete(tx *gorm.DB) (err error) {
 	return nil
 }
 
-func (v *Vehicle) CanRead(user *User) bool {
+func (v *Vehicle) CanRead(a *app.App, user *User) bool {
 	if v.CreatedBy == user.ID {
 		return true
 	}
@@ -61,7 +62,7 @@ func (v *Vehicle) CanRead(user *User) bool {
 		CanRead bool `json:"can_read"`
 	}
 	var result Result
-	err := database.DB.Raw(`
+	err := a.Gorm.Raw(`
 	SELECT
 		true AS can_read
 	FROM vehicle_user_access A
@@ -77,9 +78,9 @@ func (v *Vehicle) CanRead(user *User) bool {
 	return result.CanRead
 }
 
-func (v *Vehicle) CanPendingRead(user *User) bool {
+func (v *Vehicle) CanPendingRead(a *app.App, user *User) bool {
 	var pendingShare VehicleUserAccessPending
-	if err := database.DB.First(&pendingShare, "vehicle_id = ? AND user_id = ?", v.ID, user.ID).Error; err != nil {
+	if err := a.Gorm.First(&pendingShare, "vehicle_id = ? AND user_id = ?", v.ID, user.ID).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 		}
@@ -89,7 +90,7 @@ func (v *Vehicle) CanPendingRead(user *User) bool {
 	return pendingShare.ID != uuid.Nil
 }
 
-func (v *Vehicle) CanWrite(user *User) bool {
+func (v *Vehicle) CanWrite(a *app.App, user *User) bool {
 	if v.CreatedBy == user.ID {
 		return true
 	}
@@ -98,7 +99,7 @@ func (v *Vehicle) CanWrite(user *User) bool {
 		WriteAccess bool `json:"write_access"`
 	}
 	var result Result
-	err := database.DB.Raw(`
+	err := a.Gorm.Raw(`
 	SELECT
 		A.write_access
 	FROM vehicle_user_access A

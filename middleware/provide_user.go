@@ -1,12 +1,14 @@
 package middleware
 
 import (
-	"auto-myself-api/database"
+	"auto-myself-api/app"
 	"auto-myself-api/models"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid"
@@ -27,10 +29,10 @@ func getBearerFromHeader(header string) string {
 	return strings.TrimSpace(header[len(prefix):])
 }
 
-func AuthMiddleware() gin.HandlerFunc {
-	secret := []byte(os.Getenv("JWT_SECRET"))
+func AuthMiddleware(a *app.App) gin.HandlerFunc {
+	secret := []byte(os.Getenv("JWT_SIGNING_SECRET"))
 	if len(secret) == 0 {
-		log.Fatal("JWT_SECRET environment variable is not set")
+		log.Fatal("JWT_SIGNING_SECRET environment variable is not set")
 	}
 	return func(c *gin.Context) {
 		tokenString := getBearerFromHeader(c.GetHeader("Authorization"))
@@ -66,7 +68,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		var user = models.User{}
-		err = database.DB.First(&user, "id = ?", parsedUUID).Error
+		err = a.Gorm.First(&user, "id = ?", parsedUUID).Error
 
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {

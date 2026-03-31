@@ -1,4 +1,4 @@
-package database
+package controllers
 
 import (
 	"fmt"
@@ -26,14 +26,4 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
-}
-
-func TestConnection(t *testing.T) {
-	var err error
-	db := TestConnectDB(t)
-
-	err = db.Ping()
-	if err != nil {
-		t.Fatalf("Failed to connect to the test database: %v", err)
-	}
 }

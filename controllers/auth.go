@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"auto-myself-api/database"
+	"auto-myself-api/app"
 	"auto-myself-api/models"
 	"encoding/json"
 	"fmt"
@@ -45,7 +45,7 @@ func getAuthKey(provider string, kid string) (string, error) {
 
 }
 
-func googleProvider(c *gin.Context) {
+func googleProvider(c *gin.Context, a *app.App) {
 	conf := &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
@@ -72,25 +72,25 @@ func googleProvider(c *gin.Context) {
 	client.Get("...")
 }
 
-func appleProvider(c *gin.Context) {
+func appleProvider(c *gin.Context, a *app.App) {
 }
 
-func LoginExchangeProvider(c *gin.Context) {
+func LoginExchangeProvider(c *gin.Context, a *app.App) {
 	provider := c.Param("provider")
 	switch provider {
 	case "google":
-		googleProvider(c)
+		googleProvider(c, a)
 	case "apple":
-		appleProvider(c)
+		appleProvider(c, a)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
 	}
 }
 
-func Refresh(c *gin.Context) {
+func Refresh(c *gin.Context, a *app.App) {
 }
 
-func googleRedirect(c *gin.Context) {
+func googleRedirect(c *gin.Context, a *app.App) {
 	conf := &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_WEB_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_WEB_CLIENT_SECRET"),
@@ -106,22 +106,22 @@ func googleRedirect(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func appleRedirect(c *gin.Context) {
+func appleRedirect(c *gin.Context, a *app.App) {
 }
 
-func LoginWebProvider(c *gin.Context) {
+func LoginWebProvider(c *gin.Context, a *app.App) {
 	provider := c.Param("provider")
 	switch provider {
 	case "google":
-		googleRedirect(c)
+		googleRedirect(c, a)
 	case "apple":
-		appleRedirect(c)
+		appleRedirect(c, a)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
 	}
 }
 
-func googleCallback(c *gin.Context) {
+func googleCallback(c *gin.Context, a *app.App) {
 	conf := &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_WEB_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_WEB_CLIENT_SECRET"),
@@ -184,7 +184,7 @@ func googleCallback(c *gin.Context) {
 		},
 	}
 
-	if err := database.DB.Where(&identity.IdentityBase).FirstOrCreate(&identity).Error; err != nil {
+	if err := a.Gorm.Where(&identity.IdentityBase).FirstOrCreate(&identity).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find or create user"})
 		return
 	}
@@ -195,17 +195,17 @@ func googleCallback(c *gin.Context) {
 				Username: googleData.Name,
 			},
 		}
-		if err := database.DB.Create(&identity.User).Error; err != nil {
+		if err := a.Gorm.Create(&identity.User).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create new user"})
 			return
 		}
 		identity.UserID = identity.User.ID
-		if err := database.DB.Save(&identity).Error; err != nil {
+		if err := a.Gorm.Save(&identity).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update identity with new user"})
 			return
 		}
 	} else {
-		database.DB.Model(&identity).Association("User").Find(&identity.User)
+		a.Gorm.Model(&identity).Association("User").Find(&identity.User)
 	}
 
 	token, err := identity.User.GenerateJWT()
@@ -217,16 +217,16 @@ func googleCallback(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"authentication": "Bearer " + token})
 }
 
-func appleCallback(c *gin.Context) {
+func appleCallback(c *gin.Context, a *app.App) {
 }
 
-func LoginWebCallback(c *gin.Context) {
+func LoginWebCallback(c *gin.Context, a *app.App) {
 	provider := c.Param("provider")
 	switch provider {
 	case "google":
-		googleCallback(c)
+		googleCallback(c, a)
 	case "apple":
-		appleCallback(c)
+		appleCallback(c, a)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
 	}
@@ -237,7 +237,7 @@ type DevelopmentLoginRequest struct {
 }
 
 // DEVELOPMENT ONLY Login
-func LoginDevelopment(c *gin.Context) {
+func LoginDevelopment(c *gin.Context, a *app.App) {
 	if gin.Mode() != gin.DebugMode && gin.Mode() != gin.TestMode {
 		c.Status(http.StatusTeapot)
 		return
@@ -250,7 +250,7 @@ func LoginDevelopment(c *gin.Context) {
 	}
 
 	user := models.User{}
-	result := database.DB.First(&user, "id = ?", developmentLoginRequest.UserID)
+	result := a.Gorm.First(&user, "id = ?", developmentLoginRequest.UserID)
 	if result.Error != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
