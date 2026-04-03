@@ -2,8 +2,8 @@ package models
 
 import (
 	"auto-myself-api/app"
-	"auto-myself-api/database"
 	"auto-myself-api/helpers"
+	"fmt"
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
@@ -41,12 +41,12 @@ func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
 
 func (v *Vehicle) AfterDelete(tx *gorm.DB) (err error) {
 	if err := tx.Where("vehicle_id = ?", v.ID).Delete(&MaintenanceRecord{}).Error; err != nil {
-		database.LogError(err)
+		fmt.Printf("Database error: %v\n", err)
 		return err
 	}
 
 	if err := tx.Where("vehicle_id = ?", v.ID).Delete(&VehicleUserAccess{}).Error; err != nil {
-		database.LogError(err)
+		fmt.Printf("Database error: %v\n", err)
 		return err
 	}
 
@@ -70,7 +70,7 @@ func (v *Vehicle) CanRead(a *app.App, user *User) bool {
 	LIMIT 1`, v.ID, user.ID).Scan(&result).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
+			fmt.Printf("Database error: %v\n", err)
 		}
 		return false
 	}
@@ -82,7 +82,7 @@ func (v *Vehicle) CanPendingRead(a *app.App, user *User) bool {
 	var pendingShare VehicleUserAccessPending
 	if err := a.Gorm.First(&pendingShare, "vehicle_id = ? AND user_id = ?", v.ID, user.ID).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
+			fmt.Printf("Database error: %v\n", err)
 		}
 		return false
 	}
@@ -108,7 +108,7 @@ func (v *Vehicle) CanWrite(a *app.App, user *User) bool {
 	LIMIT 1`, v.ID, user.ID).Scan(&result).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
+			fmt.Printf("Database error: %v\n", err)
 		}
 		return false
 	}

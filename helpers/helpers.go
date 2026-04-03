@@ -1,15 +1,15 @@
 package helpers
 
 import (
+	"auto-myself-api/app"
+	"auto-myself-api/database"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
-	"path/filepath"
 	"strings"
-	"testing"
 
+	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
@@ -22,23 +22,23 @@ type DatabaseMetadata struct {
 
 var jwt_collection = make(map[string]string)
 
-func TestRequestAsUser(r *gin.Engine, method, path string, user_id string, body io.Reader) *httptest.ResponseRecorder {
-	bearer, exists := jwt_collection[user_id]
+func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body io.Reader) *httptest.ResponseRecorder {
+	bearer, exists := jwt_collection[userId]
 	if !exists {
-		req, _ := http.NewRequest("POST", "/auth/development", strings.NewReader(`{"user_id":"`+user_id+`"}`))
+		req, _ := http.NewRequest("POST", "/auth/development", strings.NewReader(`{"user_id":"`+userId+`"}`))
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
-			panic("Failed to get JWT for user " + user_id)
+			panic("Failed to get JWT for user " + userId)
 		}
 		var response struct {
 			Bearer string `json:"authentication"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-			panic("Failed to parse JWT response for user " + user_id + ": " + err.Error())
+			panic("Failed to parse JWT response for user " + userId + ": " + err.Error())
 		}
 		bearer = response.Bearer
-		jwt_collection[user_id] = bearer
+		jwt_collection[userId] = bearer
 	}
 
 	headers := map[string]string{
@@ -57,29 +57,22 @@ func TestRequestAsUser(r *gin.Engine, method, path string, user_id string, body 
 	return w
 }
 
-func GetRelativeRootPath(tb testing.TB) string {
-	if tb != nil {
-		tb.Helper()
-	}
-	importPath := runGoList(tb, "list", "-f", "{{.ImportPath}}")
-	modulePath := runGoList(tb, "list", "-m", "-f", "{{.Path}}")
-	pkgPath := runGoList(tb, "list", "-f", "{{.Dir}}")
+func MakeApp() *app.App {
+	db := database.ConnectDB()
+	gorm := database.ConnectGorm(db)
+	gclient := database.ConnectGoogleClient()
 
-	relativePath, err := filepath.Rel(importPath, modulePath)
-	if err != nil {
-		panic("failed to get relative path: " + err.Error())
+	return &app.App{
+		Gorm:    gorm,
+		DB:      db,
+		Gclient: gclient,
 	}
-	return filepath.Join(pkgPath, relativePath)
 }
 
-func runGoList(tb testing.TB, arg ...string) string {
-	if tb != nil {
-		tb.Helper()
-	}
-	cmd := exec.Command("go", arg...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		panic("runGoList: " + err.Error() + "\nOutput: " + string(output))
-	}
-	return strings.TrimSpace(string(output))
+func MakeGin() *gin.Engine {
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(slog.SetLogger())
+	r.TrustedPlatform = gin.PlatformGoogleAppEngine
+	return r
 }

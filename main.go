@@ -1,9 +1,8 @@
 package main
 
 import (
-	"auto-myself-api/app"
 	"auto-myself-api/controllers"
-	"auto-myself-api/database"
+	"auto-myself-api/helpers"
 	"context"
 	"log"
 	"net/http"
@@ -12,28 +11,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
-	db := database.ConnectDB()
-	gorm := database.ConnectGorm(db)
-	gclient := database.ConnectGoogleClient()
-
-	a := &app.App{
-		Gorm:    gorm,
-		DB:      db,
-		Gclient: gclient,
+	a := helpers.MakeApp()
+	r := helpers.MakeGin()
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-
-	r := gin.Default()
-	r.TrustedPlatform = gin.PlatformCloudflare
 
 	controllers.SetupRoutes(r, a)
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + port,
 		Handler: r.Handler(),
 	}
 	go func() {

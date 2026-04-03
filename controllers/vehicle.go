@@ -7,9 +7,9 @@ import (
 	"auto-myself-api/models"
 	"net/http"
 
+	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
-	"gorm.io/gorm"
 )
 
 func GetAllVehicles(c *gin.Context, a *app.App) {
@@ -40,15 +40,13 @@ func GetVehicleByID(c *gin.Context, a *app.App) {
 	var vehicle models.Vehicle
 	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
-		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
-		}
-		c.Status(http.StatusNotFound)
+		database.DatabaseFetchError(c, err, "id", vehicleUUID)
+		c.Abort()
 		return
 	}
 
 	if !vehicle.CanRead(a, user) && !vehicle.CanPendingRead(a, user) {
-		c.Status(http.StatusNotFound)
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 
@@ -60,7 +58,8 @@ func CreateVehicle(c *gin.Context, a *app.App) {
 
 	var newVehicle models.Vehicle
 	if err := c.ShouldBindJSON(&newVehicle.VehicleBase); err != nil {
-		c.Status(http.StatusUnprocessableEntity)
+		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+		c.AbortWithStatus(http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -72,8 +71,8 @@ func CreateVehicle(c *gin.Context, a *app.App) {
 	}
 
 	if err := a.Gorm.Create(&newVehicle).Error; err != nil {
-		database.LogError(err)
-		c.Status(http.StatusInternalServerError)
+		slog.Get(c).Warn("Failed to create vehicle", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
@@ -89,12 +88,8 @@ func DeleteVehicleByID(c *gin.Context, a *app.App) {
 	var vehicle models.Vehicle
 	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
-		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
-			c.Status(http.StatusInternalServerError)
-		} else {
-			c.Status(http.StatusNotFound)
-		}
+		database.DatabaseFetchError(c, err, "id", vehicleUUID)
+		c.Abort()
 		return
 	}
 
@@ -108,8 +103,8 @@ func DeleteVehicleByID(c *gin.Context, a *app.App) {
 	}
 
 	if err := a.Gorm.Delete(&vehicle).Error; err != nil {
-		database.LogError(err)
-		c.Status(http.StatusInternalServerError)
+		slog.Get(c).Warn("Failed to delete vehicle", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
@@ -129,33 +124,32 @@ func UpdateVehicleByID(c *gin.Context, a *app.App) {
 
 	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
-		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
-			c.Status(http.StatusInternalServerError)
-		} else {
-			c.Status(http.StatusNotFound)
-		}
+		database.DatabaseFetchError(c, err, "id", vehicleUUID)
+		c.Abort()
 		return
 	}
 
 	if !vehicle.CanWrite(a, user) {
+		var status int
 		if vehicle.CanRead(a, user) {
-			c.Status(http.StatusForbidden)
+			status = http.StatusForbidden
 		} else {
-			c.Status(http.StatusNotFound)
+			status = http.StatusNotFound
 		}
+		c.AbortWithStatus(status)
 		return
 	}
 
 	var input models.VehicleBase
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	if err := a.Gorm.Model(&vehicle).Updates(input).Error; err != nil {
-		database.LogError(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update vehicle"})
+		slog.Get(c).Warn("Failed to update vehicle", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 

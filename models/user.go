@@ -2,9 +2,9 @@ package models
 
 import (
 	"auto-myself-api/app"
-	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -73,8 +73,7 @@ func (u *User) CanRead(a *app.App, user User) bool {
 	LIMIT 1`, u.ID, user.ID, u.ID, u.ID, user.ID, user.ID).Scan(&result).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
-			return false
+			fmt.Printf("Database error: %v\n", err)
 		}
 		return false
 	}

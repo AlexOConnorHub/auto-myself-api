@@ -6,9 +6,9 @@ import (
 	"auto-myself-api/models"
 	"net/http"
 
+	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
-	"gorm.io/gorm"
 )
 
 func GetAllShares(c *gin.Context, a *app.App) {
@@ -37,16 +37,13 @@ func GetShareByID(c *gin.Context, a *app.App) {
 
 	var share models.VehicleUserAccessPending
 	if err := a.Gorm.First(&share, "id = ?", shareUUID).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			c.Status(http.StatusInternalServerError)
-		} else {
-			c.Status(http.StatusNotFound)
-		}
+		database.DatabaseFetchError(c, err, "id", shareUUID)
+		c.Abort()
 		return
 	}
 
 	if share.UserID != user.ID && share.CreatedBy != user.ID {
-		c.Status(http.StatusNotFound)
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 
@@ -56,7 +53,8 @@ func GetShareByID(c *gin.Context, a *app.App) {
 func CreateShare(c *gin.Context, a *app.App) {
 	var share models.VehicleUserAccessBase
 	if err := c.ShouldBindJSON(&share); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
@@ -65,10 +63,12 @@ func CreateShare(c *gin.Context, a *app.App) {
 	}
 
 	if err := a.Gorm.Create(&record).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		slog.Get(c).Warn("Failed to create record", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
+	c.Header("Location", "/v1/share/"+record.ID.String())
 	c.Status(http.StatusCreated)
 }
 
@@ -76,12 +76,19 @@ func AcceptShare(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 	var share models.VehicleUserAccessPending
 	if err := c.ShouldBindJSON(&share); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	if user.ID != share.UserID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have permission to accept this share"})
+		var status int
+		if user.ID == share.CreatedBy {
+			status = http.StatusForbidden
+		} else {
+			status = http.StatusNotFound
+		}
+		c.AbortWithStatus(status)
 		return
 	}
 
@@ -91,18 +98,20 @@ func AcceptShare(c *gin.Context, a *app.App) {
 	}
 
 	if err := a.Gorm.Create(&access).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		slog.Get(c).Warn("Failed to create record", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
 	if err := a.Gorm.Delete(&share).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		slog.Get(c).Warn("Failed to delete record", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
 	a.Gorm.Model(&access).Association("Vehicle").Find(&access.Vehicle)
 
-	c.Header("Location", "/v1/share/"+access.Vehicle.ID.String())
+	c.Header("Location", "/v1/vehicle/"+access.Vehicle.ID.String())
 	c.Status(http.StatusNoContent)
 }
 
@@ -113,23 +122,19 @@ func DeleteShareByID(c *gin.Context, a *app.App) {
 
 	var share models.VehicleUserAccessPending
 	if err := a.Gorm.First(&share, "id = ?", shareUUID).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			database.LogError(err)
-			c.Status(http.StatusInternalServerError)
-		} else {
-			c.Status(http.StatusNotFound)
-		}
+		database.DatabaseFetchError(c, err, "id", shareUUID)
+		c.Abort()
 		return
 	}
 
 	if user.ID != share.UserID && user.ID != share.CreatedBy {
-		c.Status(http.StatusNotFound)
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 
 	if err := a.Gorm.Delete(&share).Error; err != nil {
-		database.LogError(err)
-		c.Status(http.StatusInternalServerError)
+		slog.Get(c).Warn("Failed to delete record", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 

@@ -3,11 +3,18 @@ package controllers
 import (
 	"auto-myself-api/app"
 	"auto-myself-api/database"
+	"auto-myself-api/helpers"
 	"auto-myself-api/middleware"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 )
+
+func WithApp(a *app.App, h func(*gin.Context, *app.App)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h(c, a)
+	}
+}
 
 func SetupRoutes(r *gin.Engine, a *app.App) {
 	if gin.Mode() == gin.ReleaseMode {
@@ -16,12 +23,12 @@ func SetupRoutes(r *gin.Engine, a *app.App) {
 
 	auth := r.Group("/auth")
 	{
-		auth.GET("/:provider", func(c *gin.Context) { LoginWebProvider(c, a) })
-		auth.GET("/callback/:provider", func(c *gin.Context) { LoginWebCallback(c, a) })
+		auth.GET("/:provider", WithApp(a, LoginWebProvider))
+		auth.GET("/callback/:provider", WithApp(a, LoginWebCallback))
 		// auth.POST("/logout", )
-		auth.POST("/exchange/:provider", func(c *gin.Context) { LoginExchangeProvider(c, a) })
-		auth.POST("/development", func(c *gin.Context) { LoginDevelopment(c, a) })
-		auth.POST("/refresh", func(c *gin.Context) { Refresh(c, a) })
+		auth.POST("/exchange/:provider", WithApp(a, LoginExchangeProvider))
+		auth.POST("/development", WithApp(a, LoginDevelopment))
+		auth.POST("/refresh", WithApp(a, Refresh))
 	}
 
 	v1 := r.Group("/v1")
@@ -31,51 +38,51 @@ func SetupRoutes(r *gin.Engine, a *app.App) {
 		uuidPath := "/:uuid"
 		user := v1.Group("/user")
 		{
-			user.GET("", func(c *gin.Context) { GetCurrentUser(c, a) })
-			user.PATCH("", func(c *gin.Context) { UpdateCurrentUser(c, a) })
-			// user.DELETE("", func(c *gin.Context) { DeleteCurrentUser(c, a) })
+			user.GET("", WithApp(a, GetCurrentUser))
+			user.PATCH("", WithApp(a, UpdateCurrentUser))
+			// user.DELETE("", WithApp(a, DeleteCurrentUser))
 			uuidGroup := user.Group(uuidPath)
 			{
 
-				uuidGroup.GET("", func(c *gin.Context) { GetUserByID(c, a) })
+				uuidGroup.GET("", WithApp(a, GetUserByID))
 			}
 		}
 
 		vehicle := v1.Group("/vehicle")
 		{
-			vehicle.GET("", func(c *gin.Context) { GetAllVehicles(c, a) })
-			vehicle.POST("", func(c *gin.Context) { CreateVehicle(c, a) })
+			vehicle.GET("", WithApp(a, GetAllVehicles))
+			vehicle.POST("", WithApp(a, CreateVehicle))
 			uuidGroup := vehicle.Group(uuidPath)
 			{
-				uuidGroup.GET("", func(c *gin.Context) { GetVehicleByID(c, a) })
-				uuidGroup.POST("", func(c *gin.Context) { CreateVehicle(c, a) })
-				uuidGroup.PATCH("", func(c *gin.Context) { UpdateVehicleByID(c, a) })
-				uuidGroup.DELETE("", func(c *gin.Context) { DeleteVehicleByID(c, a) })
-				uuidGroup.GET("/maintenance", func(c *gin.Context) { GetAllMaintenance(c, a) })
+				uuidGroup.GET("", WithApp(a, GetVehicleByID))
+				uuidGroup.POST("", WithApp(a, CreateVehicle))
+				uuidGroup.PATCH("", WithApp(a, UpdateVehicleByID))
+				uuidGroup.DELETE("", WithApp(a, DeleteVehicleByID))
+				uuidGroup.GET("/maintenance", WithApp(a, GetAllMaintenance))
 			}
 		}
 
 		maintenance := v1.Group("/maintenance")
 		{
-			maintenance.POST("", func(c *gin.Context) { CreateMaintenance(c, a) })
+			maintenance.POST("", WithApp(a, CreateMaintenance))
 			uuidGroup := maintenance.Group(uuidPath)
 			{
-				uuidGroup.GET("", func(c *gin.Context) { GetMaintenanceByID(c, a) })
-				uuidGroup.POST("", func(c *gin.Context) { CreateMaintenance(c, a) })
-				uuidGroup.PATCH("", func(c *gin.Context) { UpdateMaintenanceByID(c, a) })
-				uuidGroup.DELETE("", func(c *gin.Context) { DeleteMaintenanceByID(c, a) })
+				uuidGroup.GET("", WithApp(a, GetMaintenanceByID))
+				uuidGroup.POST("", WithApp(a, CreateMaintenance))
+				uuidGroup.PATCH("", WithApp(a, UpdateMaintenanceByID))
+				uuidGroup.DELETE("", WithApp(a, DeleteMaintenanceByID))
 			}
 		}
 
 		share := v1.Group("/share")
 		{
-			share.GET("", func(c *gin.Context) { GetAllShares(c, a) })
-			share.POST("", func(c *gin.Context) { CreateShare(c, a) })
+			share.GET("", WithApp(a, GetAllShares))
+			share.POST("", WithApp(a, CreateShare))
 			uuidGroup := share.Group(uuidPath)
 			{
-				uuidGroup.GET("", func(c *gin.Context) { GetShareByID(c, a) })
-				uuidGroup.PATCH("", func(c *gin.Context) { AcceptShare(c, a) })
-				uuidGroup.DELETE("", func(c *gin.Context) { DeleteShareByID(c, a) })
+				uuidGroup.GET("", WithApp(a, GetShareByID))
+				uuidGroup.PATCH("", WithApp(a, AcceptShare))
+				uuidGroup.DELETE("", WithApp(a, DeleteShareByID))
 			}
 		}
 	}
@@ -89,21 +96,14 @@ var (
 )
 
 func setupTest(t *testing.T) (*gin.Engine, *app.App) {
-	db := database.TestConnectDB(t)
-	gorm := database.ConnectGorm(db)
-	gclient := database.ConnectGoogleClient()
-
+	app := helpers.MakeApp()
 	gin.SetMode(gin.TestMode)
-	r := gin.Default()
-	a := &app.App{
-		DB:      db,
-		Gorm:    gorm,
-		Gclient: gclient,
-	}
-	SetupRoutes(r, a)
+	r := helpers.MakeGin()
 
-	database.MigrateDB(t, db)
-	database.ReseedDB(t, db)
+	SetupRoutes(r, app)
 
-	return r, a
+	database.MigrateDB(t, app.DB)
+	database.ReseedDB(t, app.DB)
+
+	return r, app
 }
