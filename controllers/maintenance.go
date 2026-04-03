@@ -9,22 +9,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
 func GetAllMaintenance(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	var vehicle models.Vehicle
-	err = a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
+	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -52,15 +47,10 @@ func GetAllMaintenance(c *gin.Context, a *app.App) {
 func GetMaintenanceByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	maintenanceUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	maintenanceUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	var maintenanceRecord models.MaintenanceRecord
-	err = a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
+	err := a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -89,14 +79,9 @@ func CreateMaintenance(c *gin.Context, a *app.App) {
 
 	newMaintenanceRecord.CreatedBy = user.ID
 
-	userProvidedUUID := c.Param("uuid")
-	if userProvidedUUID != "" {
-		UUID, err := uuid.FromString(userProvidedUUID)
-		if err != nil {
-			c.Status(http.StatusBadRequest)
-			return
-		}
-		newMaintenanceRecord.ID = UUID
+	userProvidedUUID, exists := c.Get("uuid_param")
+	if exists {
+		newMaintenanceRecord.ID = userProvidedUUID.(uuid.UUID)
 	}
 
 	if err := a.Gorm.Create(&newMaintenanceRecord).Error; err != nil {
@@ -111,15 +96,10 @@ func CreateMaintenance(c *gin.Context, a *app.App) {
 func DeleteMaintenanceByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	maintenanceRecordUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	maintenanceRecordUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	var maintenanceRecord models.MaintenanceRecord
-	err = a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceRecordUUID).Error
+	err := a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceRecordUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -152,12 +132,7 @@ func DeleteMaintenanceByID(c *gin.Context, a *app.App) {
 func UpdateMaintenanceByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	maintenanceUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	maintenanceUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	maintenanceRecord := models.MaintenanceRecord{
 		DatabaseMetadata: helpers.DatabaseMetadata{
@@ -165,7 +140,7 @@ func UpdateMaintenanceByID(c *gin.Context, a *app.App) {
 		},
 	}
 
-	err = a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
+	err := a.Gorm.First(&maintenanceRecord, "id = ?", maintenanceUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)

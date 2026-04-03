@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )

@@ -318,8 +318,8 @@ func TestVehicleReadPermissions(t *testing.T) {
 		}
 	}
 
-	for authUser, acces := range successMatrix {
-		for readUser, errorMessage := range acces {
+	for authUser, access := range successMatrix {
+		for readUser, errorMessage := range access {
 			if errorMessage != "" {
 				authUserName := AllUsers[authUser][1]
 				vehicleName := AllVehicles[readUser][1].(string)
@@ -391,8 +391,8 @@ func TestVehicleWritePermissions(t *testing.T) {
 		}
 	}
 
-	for authUser, acces := range successMatrix {
-		for readUser, errorMessage := range acces {
+	for authUser, access := range successMatrix {
+		for readUser, errorMessage := range access {
 			if errorMessage != "" {
 				authUserName := AllUsers[authUser][1]
 				vehicleName := AllVehicles[readUser][1].(string)

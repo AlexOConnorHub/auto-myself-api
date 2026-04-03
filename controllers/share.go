@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
@@ -32,8 +33,10 @@ func GetAllShares(c *gin.Context, a *app.App) {
 func GetShareByID(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
+	shareUUID := c.MustGet("uuid_param").(uuid.UUID)
+
 	var share models.VehicleUserAccessPending
-	if err := a.Gorm.First(&share, "id = ?", c.Param("uuid")).Error; err != nil {
+	if err := a.Gorm.First(&share, "id = ?", shareUUID).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			c.Status(http.StatusInternalServerError)
 		} else {
@@ -106,8 +109,10 @@ func AcceptShare(c *gin.Context, a *app.App) {
 func DeleteShareByID(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
+	shareUUID := c.MustGet("uuid_param").(uuid.UUID)
+
 	var share models.VehicleUserAccessPending
-	if err := a.Gorm.First(&share, "id = ?", c.Param("uuid")).Error; err != nil {
+	if err := a.Gorm.First(&share, "id = ?", shareUUID).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 			c.Status(http.StatusInternalServerError)

@@ -7,16 +7,17 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
 func GetUserByID(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 
-	uuid := c.Param("uuid")
+	userUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	var requestedUser models.User
-	if err := a.Gorm.First(&requestedUser, "id = ?", uuid).Error; err != nil {
+	if err := a.Gorm.First(&requestedUser, "id = ?", userUUID).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
 			c.Status(http.StatusInternalServerError)

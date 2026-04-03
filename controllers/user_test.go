@@ -151,8 +151,8 @@ func TestUserReadPermissions(t *testing.T) {
 		}
 	}
 
-	for authUser, acces := range successMatrix {
-		for readUser, errorMessage := range acces {
+	for authUser, access := range successMatrix {
+		for readUser, errorMessage := range access {
 			if errorMessage != "" {
 				authUserName := AllUsers[authUser][1]
 				readUserName := AllUsers[readUser][1]

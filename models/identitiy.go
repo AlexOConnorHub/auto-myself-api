@@ -3,7 +3,7 @@ package models
 import (
 	"auto-myself-api/helpers"
 
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
@@ -24,9 +24,9 @@ func (Identity) TableName() string {
 	return "identities"
 }
 
-func (u *Identity) BeforeCreate(tx *gorm.DB) (err error) {
-	if u.ID.IsNil() {
-		u.DatabaseMetadata.ID, err = uuid.NewV7()
+func (i *Identity) BeforeCreate(tx *gorm.DB) (err error) {
+	if i.ID.IsNil() {
+		i.ID, err = uuid.NewV7()
 	}
 	return err
 }

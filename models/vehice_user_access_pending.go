@@ -3,7 +3,7 @@ package models
 import (
 	"auto-myself-api/helpers"
 
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
@@ -21,7 +21,7 @@ func (VehicleUserAccessPending) TableName() string {
 
 func (s *VehicleUserAccessPending) BeforeCreate(tx *gorm.DB) (err error) {
 	if s.ID.IsNil() {
-		s.DatabaseMetadata.ID, err = uuid.NewV7()
+		s.ID, err = uuid.NewV7()
 	}
 	return err
 }

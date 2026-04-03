@@ -5,11 +5,10 @@ import (
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 	"auto-myself-api/models"
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
@@ -36,15 +35,10 @@ func GetAllVehicles(c *gin.Context, a *app.App) {
 func GetVehicleByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	var vehicle models.Vehicle
-	err = a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
+	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -72,15 +66,9 @@ func CreateVehicle(c *gin.Context, a *app.App) {
 
 	newVehicle.CreatedBy = user.ID
 
-	userProvidedUUID := c.Param("uuid")
-	if userProvidedUUID != "" {
-		UUID, err := uuid.FromString(userProvidedUUID)
-		if err != nil {
-			fmt.Printf("Got %s for %s", err, userProvidedUUID)
-			c.Status(http.StatusBadRequest)
-			return
-		}
-		newVehicle.ID = UUID
+	vehicleUUID, exists := c.Get("uuid_param")
+	if exists {
+		newVehicle.ID = vehicleUUID.(uuid.UUID)
 	}
 
 	if err := a.Gorm.Create(&newVehicle).Error; err != nil {
@@ -96,15 +84,10 @@ func CreateVehicle(c *gin.Context, a *app.App) {
 func DeleteVehicleByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	var vehicle models.Vehicle
-	err = a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
+	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)
@@ -136,12 +119,7 @@ func DeleteVehicleByID(c *gin.Context, a *app.App) {
 func UpdateVehicleByID(c *gin.Context, a *app.App) {
 	var user = c.MustGet("user").(*models.User)
 
-	vehicleUUID, err := uuid.FromString(c.Param("uuid"))
-
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
+	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
 
 	vehicle := models.Vehicle{
 		DatabaseMetadata: helpers.DatabaseMetadata{
@@ -149,7 +127,7 @@ func UpdateVehicleByID(c *gin.Context, a *app.App) {
 		},
 	}
 
-	err = a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
+	err := a.Gorm.First(&vehicle, "id = ?", vehicleUUID).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			database.LogError(err)

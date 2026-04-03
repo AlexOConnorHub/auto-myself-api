@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 )
 
 var AllMaintenances = [][]interface{}{
@@ -181,7 +181,7 @@ func TestMaintenancePost(t *testing.T) {
 		t.Error("Expected Location header to be set, but it was empty")
 	}
 
-	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil) // TODO
+	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}
@@ -238,7 +238,7 @@ func TestMaintenancePostWithUUID(t *testing.T) {
 		t.Errorf("Expected maintenance record ID to be %s, got %s", uuid, pathParts[len(pathParts)-1])
 	}
 
-	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil) // TODO
+	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 	}

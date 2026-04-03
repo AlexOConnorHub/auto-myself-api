@@ -10,7 +10,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
 )
@@ -34,7 +34,7 @@ func (User) TableName() string {
 
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	if u.ID.IsNil() {
-		u.DatabaseMetadata.ID, err = uuid.NewV7()
+		u.ID, err = uuid.NewV7()
 	}
 	return err
 }

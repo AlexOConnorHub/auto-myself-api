@@ -4,7 +4,7 @@ import (
 	"auto-myself-api/helpers"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
@@ -33,7 +33,7 @@ func (MaintenanceRecord) TableName() string {
 
 func (m *MaintenanceRecord) BeforeCreate(tx *gorm.DB) (err error) {
 	if m.ID.IsNil() {
-		m.DatabaseMetadata.ID, err = uuid.NewV7()
+		m.ID, err = uuid.NewV7()
 	}
 	return err
 }

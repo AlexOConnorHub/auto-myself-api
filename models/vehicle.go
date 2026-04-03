@@ -5,7 +5,7 @@ import (
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 
-	"github.com/gofrs/uuid"
+	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
@@ -34,7 +34,7 @@ func (Vehicle) TableName() string {
 
 func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
 	if v.ID.IsNil() {
-		v.DatabaseMetadata.ID, err = uuid.NewV7()
+		v.ID, err = uuid.NewV7()
 	}
 	return err
 }
