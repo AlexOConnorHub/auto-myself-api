@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"auto-myself-api/app"
-	"auto-myself-api/database"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
+
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"gorm.io/gorm"
 )
 
@@ -58,9 +59,9 @@ func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body i
 }
 
 func MakeApp() *app.App {
-	db := database.ConnectDB()
-	gorm := database.ConnectGorm(db)
-	gclient := database.ConnectGoogleClient()
+	db := ConnectDB()
+	gorm := ConnectGorm(db)
+	gclient := ConnectGoogleClient()
 
 	return &app.App{
 		Gorm:    gorm,

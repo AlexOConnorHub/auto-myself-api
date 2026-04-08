@@ -10,8 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {

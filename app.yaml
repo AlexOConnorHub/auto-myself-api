@@ -1,0 +1,17 @@
+runtime: go125
+env: standard
+instance_class: F1
+handlers:
+  - url: .*
+    script: auto
+automatic_scaling:
+  min_idle_instances: automatic
+  max_idle_instances: automatic
+  min_pending_latency: automatic
+  max_pending_latency: automatic
+  min_instances: 1
+  max_instances: 1
+service_account: api-deploy@project-a3662e1e-1518-4c2b-a85.iam.gserviceaccount.com
+env_variables:
+  GOOGLE_SECRET_MANAGER_PROJECT_ID: '831910101995'
+  GIN_MODE: 'release'

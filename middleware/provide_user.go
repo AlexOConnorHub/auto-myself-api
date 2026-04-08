@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"auto-myself-api/app"
+	"auto-myself-api/helpers"
 	"auto-myself-api/models"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -30,7 +30,7 @@ func getBearerFromHeader(header string) string {
 }
 
 func AuthMiddleware(a *app.App) gin.HandlerFunc {
-	secret := []byte(os.Getenv("JWT_SIGNING_SECRET"))
+	secret := []byte(helpers.GetSecret("JWT_SIGNING_SECRET"))
 	if len(secret) == 0 {
 		log.Fatal("JWT_SIGNING_SECRET environment variable is not set")
 	}

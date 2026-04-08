@@ -1,6 +1,7 @@
 package database
 
 import (
+	"auto-myself-api/helpers"
 	"fmt"
 	"log"
 	"os"
@@ -30,7 +31,7 @@ func TestMain(m *testing.M) {
 
 func TestConnection(t *testing.T) {
 	var err error
-	db := TestConnectDB(t)
+	db := helpers.TestConnectDB(t)
 
 	err = db.Ping()
 	if err != nil {

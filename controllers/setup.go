@@ -96,14 +96,22 @@ var (
 )
 
 func setupTest(t *testing.T) (*gin.Engine, *app.App) {
-	app := helpers.MakeApp()
+	db := helpers.TestConnectDB(t)
+	gorm := helpers.ConnectGorm(db)
+	gclient := helpers.ConnectGoogleClient()
+
+	app := app.App{
+		Gorm:    gorm,
+		DB:      db,
+		Gclient: gclient,
+	}
 	gin.SetMode(gin.TestMode)
 	r := helpers.MakeGin()
 
-	SetupRoutes(r, app)
+	SetupRoutes(r, &app)
 
 	database.MigrateDB(t, app.DB)
 	database.ReseedDB(t, app.DB)
 
-	return r, app
+	return r, &app
 }

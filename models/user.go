@@ -5,7 +5,6 @@ import (
 	"auto-myself-api/helpers"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -81,7 +80,7 @@ func (u *User) CanRead(a *app.App, user User) bool {
 }
 
 func (u *User) GenerateJWT() (string, error) {
-	secret := os.Getenv("JWT_SIGNING_SECRET")
+	secret := helpers.GetSecret("JWT_SIGNING_SECRET")
 	if secret == "" {
 		return "", errors.New("JWT_SIGNING_SECRET environment variable is not set")
 	}

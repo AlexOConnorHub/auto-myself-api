@@ -2,13 +2,13 @@ package controllers
 
 import (
 	"auto-myself-api/app"
+	"auto-myself-api/helpers"
 	"auto-myself-api/models"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -47,8 +47,8 @@ func getAuthKey(provider string, kid string) (string, error) {
 
 func googleProvider(c *gin.Context, a *app.App) {
 	conf := &oauth2.Config{
-		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		ClientID:     helpers.GetSecret("GOOGLE_CLIENT_ID"),
+		ClientSecret: helpers.GetSecret("GOOGLE_CLIENT_SECRET"),
 		RedirectURL:  "http://localhost.automyself.com:8080/auth/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
@@ -92,8 +92,8 @@ func Refresh(c *gin.Context, a *app.App) {
 
 func googleRedirect(c *gin.Context, a *app.App) {
 	conf := &oauth2.Config{
-		ClientID:     os.Getenv("GOOGLE_WEB_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_WEB_CLIENT_SECRET"),
+		ClientID:     helpers.GetSecret("GOOGLE_WEB_CLIENT_ID"),
+		ClientSecret: helpers.GetSecret("GOOGLE_WEB_CLIENT_SECRET"),
 		RedirectURL:  "http://localhost.automyself.com:8080/auth/callback/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
@@ -123,8 +123,8 @@ func LoginWebProvider(c *gin.Context, a *app.App) {
 
 func googleCallback(c *gin.Context, a *app.App) {
 	conf := &oauth2.Config{
-		ClientID:     os.Getenv("GOOGLE_WEB_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_WEB_CLIENT_SECRET"),
+		ClientID:     helpers.GetSecret("GOOGLE_WEB_CLIENT_ID"),
+		ClientSecret: helpers.GetSecret("GOOGLE_WEB_CLIENT_SECRET"),
 		RedirectURL:  "http://localhost.automyself.com:8080/auth/callback/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
