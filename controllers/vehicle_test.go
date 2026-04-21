@@ -21,12 +21,25 @@ var AllVehicles = [][]interface{}{
 	{"019785fe-4eb4-766e-9c45-e1af5010246b", "Vehicle 5", 2025, "ASTON MARTIN", 440, "Vanquish", 1701, "VIN CAR 5", "LPN CAR 5", "019785fe-4eb4-766e-9c45-fc6ed4a7407b"},
 }
 
+var VehicleFields = map[string]int{
+	"uuid":            1,
+	"nickname":        2,
+	"year":            3,
+	"make":            4,
+	"make_id":         5,
+	"model":           6,
+	"model_id":        7,
+	"vin":             8,
+	"lpn":             9,
+	"owner_user_uuid": 10,
+}
+
 var VehicleAccessMatrix = [8][5]int{
 	{WRITE, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS},
 	{NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS},
 	{NO_ACCESS, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS},
-	{NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS},
-	{READ_BY_INVITE, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+	{NO_ACCESS, NO_ACCESS, WRITE, READ_BY_INVITE, NO_ACCESS},
+	{NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_BY_INVITE, NO_ACCESS},
 	{NO_ACCESS, NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS},
 	{NO_ACCESS, WRITE, NO_ACCESS, WRITE, NO_ACCESS},
 	{NO_ACCESS, WRITE, NO_ACCESS, READ_ONLY, WRITE},

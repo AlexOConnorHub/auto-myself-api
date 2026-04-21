@@ -51,6 +51,8 @@ func GetShareByID(c *gin.Context, a *app.App) {
 }
 
 func CreateShare(c *gin.Context, a *app.App) {
+	user := c.MustGet("user").(*models.User)
+
 	var share models.VehicleUserAccessBase
 	if err := c.ShouldBindJSON(&share); err != nil {
 		slog.Get(c).Warn("Failed to bind JSON", "error", err)
@@ -60,6 +62,7 @@ func CreateShare(c *gin.Context, a *app.App) {
 
 	record := models.VehicleUserAccessPending{
 		VehicleUserAccessBase: share,
+		CreatedBy:             user.ID,
 	}
 
 	if err := a.Gorm.Create(&record).Error; err != nil {
@@ -75,9 +78,11 @@ func CreateShare(c *gin.Context, a *app.App) {
 func AcceptShare(c *gin.Context, a *app.App) {
 	user := c.MustGet("user").(*models.User)
 	var share models.VehicleUserAccessPending
-	if err := c.ShouldBindJSON(&share); err != nil {
-		slog.Get(c).Warn("Failed to bind JSON", "error", err)
-		c.AbortWithStatus(http.StatusBadRequest)
+
+	err := a.Gorm.First(&share, "id = ?", c.MustGet("uuid_param").(uuid.UUID)).Error
+	if err != nil {
+		database.DatabaseFetchError(c, err, "id", c.MustGet("uuid_param").(uuid.UUID))
+		c.Abort()
 		return
 	}
 

@@ -25,7 +25,8 @@ INSERT INTO "vehicle_user_access" ("id", "user_id", "vehicle_id", "write_access"
 ('019785fe-4eb4-766e-9c46-045710f92920', '019785fe-4eb4-766e-9c45-fc6ed4a7407b', '019785fe-4eb4-766e-9c45-ddfb4b2e7210', false, '019785fe-4eb4-766e-9c45-f592a1187d0c'); -- User 8 access to Vehicle 4 (read)
 
 INSERT INTO "vehicle_user_access_pending" ("id", "user_id", "vehicle_id", "write_access", "created_by") VALUES
-('01988201-ec4e-7bae-88eb-17fd5bf60ca8', '019785fe-4eb4-766e-9c45-cec136a9ad6f', '019785fe-4eb4-766e-9c45-d0b2bb289b82', true,   '019785fe-4eb4-766e-9c45-bec7780972a2'); -- User 5 pending access to Vehicle 1 (read)
+('01988201-ec4e-7bae-88eb-17fd5bf60ca8', '019785fe-4eb4-766e-9c45-cec136a9ad6f', '019785fe-4eb4-766e-9c45-ddfb4b2e7210', true,   '019785fe-4eb4-766e-9c45-f592a1187d0c'), -- User 6 created for User 5 pending access to Vehicle 4 (write)
+('019d5352-0a33-78e5-9148-59bac3670a1a', '019785fe-4eb4-766e-9c45-c8578456b4df', '019785fe-4eb4-766e-9c45-ddfb4b2e7210', false,   '019785fe-4eb4-766e-9c45-f592a1187d0c'); -- User 6 created for User 4 pending access to Vehicle 4 (read)
 
 INSERT INTO "maintenance_records" ("id", "vehicle_id", "odometer", "timestamp", "notes", "type", "interval", "interval_type", "created_by", "cost") VALUES -- Add 2 maintenance records for every user that can write them to vehicles
 ('01978640-1148-74f8-be64-59f2af568e59', '019785fe-4eb4-766e-9c45-d0b2bb289b82', 15000, '2023-01-15', 'Oil change', 'Oil Change', 5000, 'miles', '019785fe-4eb4-766e-9c45-bec7780972a2', '$1.32'), -- User 1 Vehicle 1

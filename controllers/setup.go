@@ -5,8 +5,10 @@ import (
 	"auto-myself-api/database"
 	"auto-myself-api/helpers"
 	"auto-myself-api/middleware"
+	"fmt"
 	"testing"
 
+	"github.com/gin-contrib/timeout"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,6 +21,7 @@ func WithApp(a *app.App, h func(*gin.Context, *app.App)) gin.HandlerFunc {
 func SetupRoutes(r *gin.Engine, a *app.App) {
 	if gin.Mode() == gin.ReleaseMode {
 		r.Use(middleware.RateLimitMiddleware())
+		r.Use(timeout.New())
 	}
 
 	auth := r.Group("/auth")
@@ -96,22 +99,31 @@ var (
 )
 
 func setupTest(t *testing.T) (*gin.Engine, *app.App) {
+	t.Helper()
+
 	db := helpers.TestConnectDB(t)
-	gorm := helpers.ConnectGorm(db)
-	gclient := helpers.ConnectGoogleClient()
+	database.MigrateDB(t, db)
+	database.ReseedDB(t, db)
+
+	tx, err := db.Begin()
+	if err != nil {
+		panic("failed to begin transaction: " + err.Error())
+	}
 
 	app := app.App{
-		Gorm:    gorm,
+		Gorm:    helpers.ConnectGormTest(tx),
 		DB:      db,
-		Gclient: gclient,
+		Gclient: helpers.ConnectGoogleClient(),
 	}
+
 	gin.SetMode(gin.TestMode)
 	r := helpers.MakeGin()
-
 	SetupRoutes(r, &app)
 
-	database.MigrateDB(t, app.DB)
-	database.ReseedDB(t, app.DB)
-
+	t.Cleanup(func() {
+		tx.Rollback()
+		app.DB.Close()
+	})
+	fmt.Println("Returning")
 	return r, &app
 }

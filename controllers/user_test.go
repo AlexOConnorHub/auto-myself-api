@@ -21,6 +21,11 @@ var AllUsers = [][]string{
 	{"019785fe-4eb4-766e-9c45-fc6ed4a7407b", "User 8"},
 }
 
+var UserFields = map[string]int{
+	"uuid":     0,
+	"username": 1,
+}
+
 var UserAccessMatrix = [8][8]int{
 	{WRITE, READ_ONLY, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, READ_ONLY},
 	{READ_ONLY, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_ONLY, READ_ONLY},
@@ -120,10 +125,10 @@ func TestUserReadPermissions(t *testing.T) {
 	for authUser, access := range UserAccessMatrix {
 		for readUser, permission := range access {
 			authUUID := AllUsers[authUser][0]
-			read_uuid := AllUsers[readUser][0]
+			readUUID := AllUsers[readUser][0]
 			expected := loadUser(readUser)
 
-			w := helpers.TestRequestAsUser(r, "GET", "/v1/user/"+read_uuid, authUUID, nil)
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/user/"+readUUID, authUUID, nil)
 			if w.Code == http.StatusOK {
 				if permission == NO_ACCESS {
 					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
@@ -145,7 +150,7 @@ func TestUserReadPermissions(t *testing.T) {
 					continue
 				}
 			} else {
-				successMatrix[authUser][readUser] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, read_uuid)
+				successMatrix[authUser][readUser] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, readUUID)
 				continue
 			}
 		}

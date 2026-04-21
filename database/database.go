@@ -72,16 +72,16 @@ func ReseedDB(tb testing.TB, db *sql.DB) {
 		"file://"+cwd+"/migrations/seed",
 		"postgres", seedDriver)
 	if err != nil {
-		panic("failed to create migrate instance for seed: " + err.Error())
+		panic("failed to create instance for seed: " + err.Error())
 	}
 	if err = m.Down(); err != nil {
 		if err != migrate.ErrNoChange {
-			panic("failed to migrate seed down: " + err.Error())
+			panic("failed to seed down: " + err.Error())
 		}
 	}
 	if err = m.Up(); err != nil {
 		if err != migrate.ErrNoChange {
-			panic("failed to migrate seed: " + err.Error())
+			panic("failed to seed: " + err.Error())
 		}
 	}
 }

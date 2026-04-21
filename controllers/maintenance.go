@@ -6,7 +6,6 @@ import (
 	"auto-myself-api/helpers"
 	"auto-myself-api/models"
 	"net/http"
-	"time"
 
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
@@ -105,8 +104,7 @@ func DeleteMaintenanceByID(c *gin.Context, a *app.App) {
 	}
 	a.Gorm.Model(&maintenanceRecord).Association("Vehicle").Find(&maintenanceRecord.Vehicle)
 
-	if maintenanceRecord.Vehicle.CreatedBy != user.ID ||
-		(maintenanceRecord.CreatedAt.Add(time.Hour*24).After(time.Now()) && maintenanceRecord.CreatedBy != user.ID) {
+	if !maintenanceRecord.Vehicle.CanWrite(a, user) {
 		var status int
 		if maintenanceRecord.Vehicle.CanRead(a, user) {
 			status = http.StatusForbidden

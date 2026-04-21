@@ -83,6 +83,8 @@ github.com/gin-contrib/slog v1.2.1 h1:tQbsmllW/PNgtvHRdVlI38jLfpN4IFLS7Pb4HgTeiY
 github.com/gin-contrib/slog v1.2.1/go.mod h1:f/Ke0A3h4DUh0cQnjR2b/l+i0EmVJ+6VY6GIw3RKtxA=
 github.com/gin-contrib/sse v1.1.1 h1:uGYpNwTacv5R68bSGMapo62iLTRa9l5zxGCps4hK6ko=
 github.com/gin-contrib/sse v1.1.1/go.mod h1:QXzuVkA0YO7o/gun03UI1Q+FTI8ZV/n5t03kIQAI89s=
+github.com/gin-contrib/timeout v1.2.1 h1:vw+1K+rDo1M86G00A1RdQZDP9JJDcJjYj6+9ZVowjlk=
+github.com/gin-contrib/timeout v1.2.1/go.mod h1:sUImmGGy/39JoCfTRnouXWJRVuUvR0DGcdRorXn7VdE=
 github.com/gin-gonic/gin v1.12.0 h1:b3YAbrZtnf8N//yjKeU2+MQsh2mY5htkZidOM7O0wG8=
 github.com/gin-gonic/gin v1.12.0/go.mod h1:VxccKfsSllpKshkBWgVgRniFFAzFb9csfngsqANjnLc=
 github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=

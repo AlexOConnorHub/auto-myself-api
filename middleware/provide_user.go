@@ -17,10 +17,6 @@ import (
 )
 
 func getBearerFromHeader(header string) string {
-	if header == "" {
-		return ""
-	}
-
 	const prefix = "Bearer "
 	if !strings.HasPrefix(header, prefix) {
 		return ""

@@ -8,9 +8,9 @@ import (
 )
 
 type VehicleUserAccessBase struct {
-	UserID    uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null"`
-	VehicleID uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
-	CanWrite  bool      `json:"can_write" gorm:"field:write_access;default:false"`
+	UserID      uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null"`
+	VehicleID   uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
+	WriteAccess bool      `json:"write_access" gorm:"field:write_access;default:false"`
 }
 
 type VehicleUserAccess struct {

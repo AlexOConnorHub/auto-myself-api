@@ -17,28 +17,32 @@ func TestConnectDB(tb testing.TB) *sql.DB {
 		tb.Helper()
 	}
 
-	dsn := GetSecret("POSTGRES_TEST_DSN")
-
-	return connect(dsn)
+	return connect(GetSecret("POSTGRES_TEST_DSN"))
 }
 
 func connect(dsn string) *sql.DB {
-	var err error
-
-	// dsn := fmt.Sprintf("host=%s user=%s dbname=%s password=%s port=%s sslmode=disable",
-	// 	host, user, dbname, pass, port)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		panic("failed to connect to the database: " + err.Error())
 	}
-	if err = db.Ping(); err != nil {
+	if err := db.Ping(); err != nil {
 		panic("failed to ping the database: " + err.Error())
 	}
-
 	return db
 }
 
 func ConnectGorm(db *sql.DB) *gorm.DB {
+	Gorm, err := gorm.Open(gorm_postgres.New(gorm_postgres.Config{
+		Conn: db,
+	}), &gorm.Config{})
+
+	if err != nil {
+		panic("failed to initialize gorm: " + err.Error())
+	}
+	return Gorm
+}
+
+func ConnectGormTest(db *sql.Tx) *gorm.DB {
 	Gorm, err := gorm.Open(gorm_postgres.New(gorm_postgres.Config{
 		Conn: db,
 	}), &gorm.Config{})

@@ -35,6 +35,19 @@ var AllMaintenances = [][]interface{}{
 	{"01978640-1149-7118-bada-aa596985d112", 4, 12000, "2023-07-05", "Battery check", "Maintenance Check", 20000, "miles", "019785fe-4eb4-766e-9c45-fc6ed4a7407b", "$1.32"},
 }
 
+var MaintenanceFields = map[string]int{
+	"uuid":         0,
+	"vehicleIndex": 1,
+	"odometer":     2,
+	"timestamp":    3,
+	"notes":        4,
+	"type":         5,
+	"interval":     6,
+	"intervalType": 7,
+	"vehicleID":    8,
+	"cost":         9,
+}
+
 func validateMaintenanceResponse(marshaledResponse models.MaintenanceRecordBase, expected models.MaintenanceRecordBase) string {
 	if marshaledResponse.VehicleID != expected.VehicleID {
 		return fmt.Sprintf("Expected vehicleID to be %s, got %s", expected.VehicleID, marshaledResponse.VehicleID)
@@ -395,5 +408,106 @@ func TestMaintenanceWritePermissions(t *testing.T) {
 
 	for _, errorMessage := range errors {
 		t.Error(errorMessage)
+	}
+}
+
+func TestMaintenanceListPermissions(t *testing.T) {
+	r, _ := setupTest(t)
+
+	var errors []string
+
+	for userIndex, userRow := range AllUsers {
+		authUUID := userRow[0]
+		for vehicleIndex, vehicleRow := range AllVehicles {
+			vehicleUUID := vehicleRow[0].(string)
+			canRead := VehicleAccessMatrix[userIndex][vehicleIndex] >= READ_ONLY
+
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicleUUID+"/maintenance", authUUID, nil)
+			if w.Code == http.StatusOK {
+				if !canRead {
+					errors = append(errors, fmt.Sprintf("User %s should not have read access to maintenance list for vehicle %s but got status %d", authUUID, vehicleUUID, w.Code))
+				}
+			} else if w.Code == http.StatusNotFound {
+				if canRead {
+					errors = append(errors, fmt.Sprintf("User %s should have read access to maintenance list for vehicle %s but got status %d", authUUID, vehicleUUID, w.Code))
+				}
+			} else {
+				errors = append(errors, fmt.Sprintf("Unexpected status code %d for user %s reading maintenance list for vehicle %s", w.Code, authUUID, vehicleUUID))
+			}
+		}
+	}
+
+	for _, errorMessage := range errors {
+		t.Error(errorMessage)
+	}
+}
+
+func TestMaintenanceDeletePermissions(t *testing.T) {
+	r, a := setupTest(t)
+
+	var errors []string
+
+	for maintenanceIndex, maintenanceRow := range AllMaintenances {
+		for userIndex, userRow := range AllUsers {
+			authUUID := userRow[UserFields["uuid"]]
+			vehicleIndex := maintenanceRow[MaintenanceFields["vehicleIndex"]].(int)
+			access := VehicleAccessMatrix[userIndex][vehicleIndex]
+
+			a.Gorm.SavePoint("TestMaintenanceDelete")
+			w := helpers.TestRequestAsUser(r, "DELETE", "/v1/maintenance/"+maintenanceRow[MaintenanceFields["uuid"]].(string), authUUID, nil)
+			a.Gorm.RollbackTo("TestMaintenanceDelete")
+
+			switch w.Code {
+			case http.StatusNoContent:
+				if access != WRITE {
+					errors = append(errors, fmt.Sprintf("User %s should not have delete access to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+				}
+			case http.StatusNotFound:
+				if access == WRITE {
+					errors = append(errors, fmt.Sprintf("User %s should have delete access to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+				} else if access == READ_ONLY {
+					errors = append(errors, fmt.Sprintf("User %s should get 403 to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+				}
+			case http.StatusForbidden:
+				if access == WRITE {
+					errors = append(errors, fmt.Sprintf("User %s should have delete access to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+				} else if access != READ_ONLY {
+					errors = append(errors, fmt.Sprintf("User %s should get 404 to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+				}
+			default:
+				errors = append(errors, fmt.Sprintf("Unexpected status code %d for user %s deleting maintenance %d (vehicle %d)", w.Code, userRow[UserFields["username"]], maintenanceIndex, vehicleIndex))
+			}
+		}
+	}
+
+	for _, errorMessage := range errors {
+		t.Error(errorMessage)
+	}
+}
+
+func TestMaintenanceEdgeCases(t *testing.T) {
+	r, _ := setupTest(t)
+
+	authUUID := AllUsers[0][0]
+	unusedUUID := "0195fba0-de33-79e3-ab0c-7357d15cbb3d"
+
+	// Test getting maintenance with invalid UUID
+	w := helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/invalid-uuid", authUUID, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status code %d for invalid UUID, got %d", http.StatusBadRequest, w.Code)
+	}
+
+	// Test getting maintenance with unused UUID
+	w = helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+unusedUUID+"/maintenance", authUUID, nil)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status code %d for unused UUID, got %d", http.StatusNotFound, w.Code)
+	}
+
+	// Test posting maintenance with bad JSON
+	badJSON := "{invalid-json}"
+	bodyReader := bytes.NewReader([]byte(badJSON))
+	w = helpers.TestRequestAsUser(r, "POST", "/v1/maintenance", authUUID, bodyReader)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("Expected status code %d for bad JSON, got %d", http.StatusUnprocessableEntity, w.Code)
 	}
 }
