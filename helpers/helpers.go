@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"auto-myself-api/app"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ type DatabaseMetadata struct {
 }
 
 var jwt_collection = make(map[string]string)
+var ctx = context.Background()
 
 func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body io.Reader) *httptest.ResponseRecorder {
 	bearer, exists := jwt_collection[userId]
@@ -61,12 +63,10 @@ func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body i
 func MakeApp() *app.App {
 	db := ConnectDB()
 	gorm := ConnectGorm(db)
-	gclient := ConnectGoogleClient()
 
 	return &app.App{
-		Gorm:    gorm,
-		DB:      db,
-		Gclient: gclient,
+		Gorm: gorm,
+		DB:   db,
 	}
 }
 

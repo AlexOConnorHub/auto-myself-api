@@ -11,5 +11,5 @@ docker run --rm \
   --network host \
   migrate/migrate \
   -path=/migrations \
-  -database="postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-localhost}:5432/${POSTGRES_DB:-appdb}?sslmode=disable&search_path=public&x-migrations-table=_schema_migrations" \
+  -database="postgres://${POSTGRES_URL:-postgres:password@localhost:5432/appdb\?}sslmode=disable&search_path=public&x-migrations-table=_schema_migrations" \
   "${ARGS[@]}"

@@ -77,6 +77,16 @@ func SetupRoutes(r *gin.Engine, a *app.App) {
 			}
 		}
 
+		files := v1.Group("/file")
+		{
+			recordInfo := files.Group("/:record_type/:uuid")
+			{
+				recordInfo.GET("", WithApp(a, GetFilesForTypeByID))
+				recordInfo.POST("", WithApp(a, CreateFileForTypeByID))
+				recordInfo.DELETE("", WithApp(a, DeleteFileForTypeByID))
+			}
+		}
+
 		share := v1.Group("/share")
 		{
 			share.GET("", WithApp(a, GetAllShares))
@@ -111,9 +121,8 @@ func setupTest(t *testing.T) (*gin.Engine, *app.App) {
 	}
 
 	app := app.App{
-		Gorm:    helpers.ConnectGormTest(tx),
-		DB:      db,
-		Gclient: helpers.ConnectGoogleClient(),
+		Gorm: helpers.ConnectGormTest(tx),
+		DB:   db,
 	}
 
 	gin.SetMode(gin.TestMode)

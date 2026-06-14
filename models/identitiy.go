@@ -17,7 +17,7 @@ type IdentityBase struct {
 type Identity struct {
 	helpers.DatabaseMetadata
 	IdentityBase
-	User User `gorm:"foreignKey:UserID;references:ID;constraint"`
+	User User `gorm:"foreignKey:UserID;references:ID;"`
 }
 
 func (Identity) TableName() string {

@@ -15,7 +15,6 @@ INSERT INTO "vehicles" ("id", "nickname", "year", "make", "make_id", "model", "m
 ('019785fe-4eb4-766e-9c45-ddfb4b2e7210', 'Vehicle 4', 2018, 'NISSAN', 478, 'GT-R', 1890, 'VIN CAR 4', 'LPN CAR 4', '019785fe-4eb4-766e-9c45-f592a1187d0c'), -- User 6 vehicle to share
 ('019785fe-4eb4-766e-9c45-e1af5010246b', 'Vehicle 5', 2025, 'ASTON MARTIN', 440, 'Vanquish', 1701, 'VIN CAR 5', 'LPN CAR 5', '019785fe-4eb4-766e-9c45-fc6ed4a7407b'); -- User 8 personal vehicle
 
-
 INSERT INTO "vehicle_user_access" ("id", "user_id", "vehicle_id", "write_access", "created_by") VALUES
 ('019785fe-4eb4-766e-9c45-e4287c35fe36', '019785fe-4eb4-766e-9c45-c1f83e7c1f1f', '019785fe-4eb4-766e-9c45-d77f41aa8317', true, '019785fe-4eb4-766e-9c45-bec7780972a2'), -- User 2 access to Vehicle 2 (write)
 ('019785fe-4eb4-766e-9c45-ea1fef642df3', '019785fe-4eb4-766e-9c45-c497f2d9fe9e', '019785fe-4eb4-766e-9c45-d77f41aa8317', false, '019785fe-4eb4-766e-9c45-bec7780972a2'), -- User 3 access to Vehicle 2 (read)

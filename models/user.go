@@ -21,10 +21,10 @@ type UserBase struct {
 type User struct {
 	helpers.DatabaseMetadata
 	UserBase
-	OwnedVehicles                []Vehicle                  `gorm:"foreignKey:CreatedBy;references:ID;constraint" json:"-"`
-	AccessedVehicles             []VehicleUserAccess        `gorm:"foreignKey:UserID;references:ID;constraint" json:"-"`
-	PendingVehicleSharesSent     []VehicleUserAccessPending `gorm:"foreignKey:CreatedBy;references:ID;constraint" json:"-"`
-	PendingVehicleSharesReceived []VehicleUserAccessPending `gorm:"foreignKey:UserID;references:ID;constraint" json:"-"`
+	OwnedVehicles                []Vehicle                  `gorm:"foreignKey:CreatedBy;references:ID;" json:"-"`
+	AccessedVehicles             []VehicleUserAccess        `gorm:"foreignKey:UserID;references:ID;" json:"-"`
+	PendingVehicleSharesSent     []VehicleUserAccessPending `gorm:"foreignKey:CreatedBy;references:ID;" json:"-"`
+	PendingVehicleSharesReceived []VehicleUserAccessPending `gorm:"foreignKey:UserID;references:ID;" json:"-"`
 }
 
 func (User) TableName() string {

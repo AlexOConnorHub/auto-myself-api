@@ -22,9 +22,10 @@ type MaintenanceRecordBase struct {
 type MaintenanceRecord struct {
 	helpers.DatabaseMetadata
 	MaintenanceRecordBase
-	CreatedBy     uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
-	CreatedByUser User      `gorm:"foreignKey:CreatedBy;references:ID;constraint"`
-	Vehicle       Vehicle   `gorm:"foreignKey:VehicleID;references:ID;constraint"`
+	CreatedBy     uuid.UUID               `json:"created_by" gorm:"type:uuid;not null"`
+	CreatedByUser User                    `gorm:"foreignKey:CreatedBy;references:ID;"`
+	Vehicle       Vehicle                 `gorm:"foreignKey:VehicleID;references:ID;"`
+	FileLink      []MaintenanceRecordFile `gorm:"foreignKey:MaintenanceRecordID;references:ID;"`
 }
 
 func (MaintenanceRecord) TableName() string {

@@ -24,8 +24,8 @@ type Vehicle struct {
 	helpers.DatabaseMetadata
 	VehicleBase
 	CreatedBy          uuid.UUID           `json:"created_by" gorm:"type:uuid;not null"`
-	CreatedByUser      User                `gorm:"foreignKey:CreatedBy;references:ID;constraint"`
-	MaintenanceRecords []MaintenanceRecord `gorm:"foreignKey:VehicleID;references:ID;constraint"`
+	CreatedByUser      User                `gorm:"foreignKey:CreatedBy;references:ID;"`
+	MaintenanceRecords []MaintenanceRecord `gorm:"foreignKey:VehicleID;references:ID;"`
 }
 
 func (Vehicle) TableName() string {
