@@ -3,6 +3,8 @@ package models
 import (
 	"auto-myself-api/app"
 	"auto-myself-api/helpers"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -79,22 +81,54 @@ func (u *User) CanRead(a *app.App, user User) bool {
 	return result.CanRead
 }
 
-func (u *User) GenerateJWT() (string, error) {
-	secret := helpers.GetSecret("JWT_SIGNING_SECRET")
-	if secret == "" {
-		return "", errors.New("JWT_SIGNING_SECRET environment variable is not set")
+func (u *User) GenerateJWT(a *app.App) (string, error) {
+	value, err := a.Secrets.Get("JWT_SIGNING_SECRET")
+	if err != nil {
+		return "", errors.New("JWT_SIGNING_SECRET not found in secrets: " + err.Error())
 	}
+	secret := value.Value
 
 	now := time.Now()
 
 	claims := jwt.RegisteredClaims{
-		Issuer:    "auto-myself-api",
-		Audience:  jwt.ClaimStrings{"auto-myself-api"},
+		Issuer:    "auto-myself-auth",
+		Audience:  jwt.ClaimStrings{"auto-myself-auth"},
 		Subject:   u.ID.String(),
 		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+		ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute * 15)),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+func (u *User) GenerateRefreshToken(tx *gorm.DB) (string, error) {
+	b := make([]byte, 16)
+	n, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	if n != len(b) {
+		return "", errors.New("could not read enough random bytes")
+	}
+
+	rawHash := sha256.Sum256(b)
+	refreshTokenString := fmt.Sprintf("%x", rawHash[:])
+
+	rawHash = sha256.Sum256([]byte(refreshTokenString))
+	refreshTokenHashString := fmt.Sprintf("%x", rawHash[:])
+
+	refreshToken := RefreshToken{
+		RefreshTokenBase: RefreshTokenBase{
+			UserID: u.ID,
+			Token:  refreshTokenHashString,
+		},
+	}
+
+	err = tx.Create(&refreshToken).Error
+	if err != nil {
+		return "", err
+	}
+
+	return refreshTokenString, nil
 }

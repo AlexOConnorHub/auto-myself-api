@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"auto-myself-api/app"
-	"auto-myself-api/helpers"
 	"auto-myself-api/models"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -16,6 +16,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var secret []byte
+
 func getBearerFromHeader(header string) string {
 	const prefix = "Bearer "
 	if !strings.HasPrefix(header, prefix) {
@@ -26,10 +28,11 @@ func getBearerFromHeader(header string) string {
 }
 
 func AuthMiddleware(a *app.App) gin.HandlerFunc {
-	secret := []byte(helpers.GetSecret("JWT_SIGNING_SECRET"))
-	if len(secret) == 0 {
-		log.Fatal("JWT_SIGNING_SECRET environment variable is not set")
+	value, err := a.Secrets.Get("JWT_SIGNING_SECRET")
+	if err != nil {
+		log.Fatal("JWT_SIGNING_SECRET not found in secrets: ", err)
 	}
+	secret = []byte(value.Value)
 	return func(c *gin.Context) {
 		tokenString := getBearerFromHeader(c.GetHeader("Authorization"))
 
@@ -42,37 +45,33 @@ func AuthMiddleware(a *app.App) gin.HandlerFunc {
 				return secret, nil
 			},
 			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-			jwt.WithAudience("auto-myself-api"),
-			jwt.WithIssuer("auto-myself-api"),
+			jwt.WithAudience("auto-myself-auth"),
+			jwt.WithIssuer("auto-myself-auth"),
 			jwt.WithIssuedAt(),
 			jwt.WithExpirationRequired(),
 		)
 		if err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.AbortWithError(http.StatusUnauthorized, err)
 			return
 		}
 
 		if !token.Valid {
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.AbortWithError(http.StatusUnauthorized, errors.New("Bearer token: Not valid"))
 			return
 		}
 
 		parsedUUID, err := uuid.FromString(claims.Subject)
 		if err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.AbortWithError(http.StatusUnauthorized, errors.New("Bearer token: bad UUID"))
 			return
 		}
 
-		var user = models.User{}
-		err = a.Gorm.First(&user, "id = ?", parsedUUID).Error
-
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				c.AbortWithStatus(http.StatusUnauthorized)
-				return
-			}
-
-			c.AbortWithStatus(http.StatusInternalServerError)
+		user, err := gorm.G[models.User](a.Gorm).Where("id = ?", parsedUUID).First(c)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.AbortWithError(http.StatusUnauthorized, errors.New("Bearer token: user not found"))
+			return
+		} else if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 

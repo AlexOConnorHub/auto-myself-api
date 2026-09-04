@@ -1,8 +1,6 @@
 package helpers
 
 import (
-	"auto-myself-api/app"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -23,9 +21,10 @@ type DatabaseMetadata struct {
 }
 
 var jwt_collection = make(map[string]string)
-var ctx = context.Background()
 
-func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body io.Reader) *httptest.ResponseRecorder {
+// var ctx = context.Background()
+
+func TestGetUserJWT(r *gin.Engine, userId string) string {
 	bearer, exists := jwt_collection[userId]
 	if !exists {
 		req, _ := http.NewRequest("POST", "/auth/development", strings.NewReader(`{"user_id":"`+userId+`"}`))
@@ -43,6 +42,11 @@ func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body i
 		bearer = response.Bearer
 		jwt_collection[userId] = bearer
 	}
+	return bearer
+}
+
+func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body io.Reader) *httptest.ResponseRecorder {
+	bearer := TestGetUserJWT(r, userId)
 
 	headers := map[string]string{
 		"Authorization": bearer,
@@ -58,16 +62,6 @@ func TestRequestAsUser(r *gin.Engine, method, path string, userId string, body i
 
 	r.ServeHTTP(w, req)
 	return w
-}
-
-func MakeApp() *app.App {
-	db := ConnectDB()
-	gorm := ConnectGorm(db)
-
-	return &app.App{
-		Gorm: gorm,
-		DB:   db,
-	}
 }
 
 func MakeGin() *gin.Engine {

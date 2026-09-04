@@ -1,6 +1,7 @@
 package main
 
 import (
+	"auto-myself-api/app"
 	"auto-myself-api/controllers"
 	"auto-myself-api/helpers"
 	"context"
@@ -13,7 +14,7 @@ import (
 )
 
 func main() {
-	a := helpers.MakeApp()
+	a := app.MakeApp()
 	r := helpers.MakeGin()
 	port := os.Getenv("PORT")
 	if port == "" {

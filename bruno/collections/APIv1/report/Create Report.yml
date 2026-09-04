@@ -1,7 +1,7 @@
 info:
-  name: Create File for Maintenance Record (1)
+  name: Create Report
   type: http
-  seq: 3
+  seq: 1
 
 http:
   method: POST
@@ -10,6 +10,14 @@ http:
     - name: maintenance_id
       value: ""
       type: path
+  body:
+    type: json
+    data: |-
+      {
+        "reported_table": "Your Mom",
+        "reported_id": "7c00bc79-2ae6-450a-8b60-b121019890ae",
+        "reason": "418"
+      }
   auth: inherit
 
 settings:

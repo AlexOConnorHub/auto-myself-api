@@ -83,7 +83,10 @@ func SetupRoutes(r *gin.Engine, a *app.App) {
 			{
 				recordInfo.GET("", WithApp(a, GetFilesForTypeByID))
 				recordInfo.POST("", WithApp(a, CreateFileForTypeByID))
-				recordInfo.DELETE("", WithApp(a, DeleteFileForTypeByID))
+			}
+			uuidGroup := files.Group(uuidPath)
+			{
+				uuidGroup.DELETE("", WithApp(a, DeleteFileByID))
 			}
 		}
 
@@ -97,6 +100,11 @@ func SetupRoutes(r *gin.Engine, a *app.App) {
 				uuidGroup.PATCH("", WithApp(a, AcceptShare))
 				uuidGroup.DELETE("", WithApp(a, DeleteShareByID))
 			}
+		}
+
+		report := v1.Group("/report")
+		{
+			report.POST("", WithApp(a, CreateReport))
 		}
 	}
 }

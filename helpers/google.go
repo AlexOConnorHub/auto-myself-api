@@ -1,20 +1,16 @@
 package helpers
 
 import (
-	"fmt"
-	"hash/crc32"
 	"io"
 	"net/http"
 	"os"
 	"time"
 
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"cloud.google.com/go/storage"
 	_ "github.com/joho/godotenv/autoload"
 )
 
-var secrets = map[string]string{}
+// var secrets = map[string]string{}
 var gProjectID string
 var gProjectNumericID string
 
@@ -70,43 +66,43 @@ func getNumericProjectID() string {
 	return gProjectNumericID
 }
 
-func GetSecret(name string) string {
-	secret, exists := secrets[name]
-	if exists {
-		return secret
-	}
+// func GetSecret(name string) string {
+// 	secret, exists := secrets[name]
+// 	if exists {
+// 		return secret
+// 	}
 
-	secret = os.Getenv(name)
-	if secret != "" {
-		secrets[name] = secret
-		return secret
-	}
+// 	secret = os.Getenv(name)
+// 	if secret != "" {
+// 		secrets[name] = secret
+// 		return secret
+// 	}
 
-	client, err := secretmanager.NewClient(ctx)
-	if err != nil {
-		panic("failed to create Google Cloud Secret Manager client: " + err.Error())
-	}
-	defer client.Close()
+// 	client, err := secretmanager.NewClient(ctx)
+// 	if err != nil {
+// 		panic("failed to create Google Cloud Secret Manager client: " + err.Error())
+// 	}
+// 	defer client.Close()
 
-	projectID := getNumericProjectID()
+// 	projectID := getNumericProjectID()
 
-	result, err := client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
-		Name: fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, name),
-	})
-	client.Close()
-	if err != nil {
-		panic("failed to locate secret " + name + ": " + err.Error())
-	}
+// 	result, err := client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
+// 		Name: fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, name),
+// 	})
+// 	client.Close()
+// 	if err != nil {
+// 		panic("failed to locate secret " + name + ": " + err.Error())
+// 	}
 
-	crc32c := crc32.MakeTable(crc32.Castagnoli)
-	checksum := int64(crc32.Checksum(result.Payload.Data, crc32c))
-	if checksum != *result.Payload.DataCrc32C {
-		panic("Data corruption detected.")
-	}
+// 	crc32c := crc32.MakeTable(crc32.Castagnoli)
+// 	checksum := int64(crc32.Checksum(result.Payload.Data, crc32c))
+// 	if checksum != *result.Payload.DataCrc32C {
+// 		panic("Data corruption detected.")
+// 	}
 
-	secrets[name] = string(result.Payload.Data)
-	return secrets[name]
-}
+// 	secrets[name] = string(result.Payload.Data)
+// 	return secrets[name]
+// }
 
 func getBucketName() string {
 	projectID := getProjectID()

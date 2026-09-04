@@ -2,14 +2,19 @@ package helpers
 
 import (
 	"database/sql"
+	"os"
 	"testing"
 
 	gorm_postgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func ConnectDB() *sql.DB {
-	return connect(GetSecret("POSTGRES_DSN"))
+func ConnectDB(secrets *SecretStore) *sql.DB {
+	dsn, err := secrets.Get("POSTGRES_DSN")
+	if err != nil {
+		panic("failed to get POSTGRES_DSN: " + err.Error())
+	}
+	return connect(dsn.Value)
 }
 
 func TestConnectDB(tb testing.TB) *sql.DB {
@@ -17,7 +22,7 @@ func TestConnectDB(tb testing.TB) *sql.DB {
 		tb.Helper()
 	}
 
-	return connect(GetSecret("POSTGRES_TEST_DSN"))
+	return connect(os.Getenv("POSTGRES_TEST_DSN"))
 }
 
 func connect(dsn string) *sql.DB {

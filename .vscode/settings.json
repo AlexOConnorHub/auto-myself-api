@@ -1,7 +1,20 @@
 {
   "cSpell.words": [
+    "appdb",
+    "CREATEDB",
+    "CREATEROLE",
+    "dbname",
     "Gclient",
+    "godotenv",
     "gofrs",
-    "Idss"
+    "Idss",
+    "joho",
+    "ldflags",
+    "pgdata",
+    "PGPORT",
+    "secretmanagerpb",
+    "sslmode",
+    "trimpath",
+    "urandom"
   ]
 }

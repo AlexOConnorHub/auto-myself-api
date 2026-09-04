@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: "{{base_url}}/file/maintenance"
+  url: "{{base_url}}/v1/file/maintenance"
   auth: inherit
 
 settings:

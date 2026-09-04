@@ -2,9 +2,10 @@ package controllers
 
 import (
 	"auto-myself-api/app"
-	"auto-myself-api/helpers"
 	"auto-myself-api/models"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,9 +13,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gofrs/uuid/v5"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"gorm.io/gorm"
 )
 
 type keyCacheItem struct {
@@ -46,9 +47,18 @@ func getAuthKey(provider string, kid string) (string, error) {
 }
 
 func googleProvider(c *gin.Context, a *app.App) {
+	client_id, err := a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_ID")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client_secret, err := a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET")
+	if err != nil {
+		log.Fatal(err)
+	}
 	conf := &oauth2.Config{
-		ClientID:     helpers.GetSecret("GOOGLE_CLIENT_ID"),
-		ClientSecret: helpers.GetSecret("GOOGLE_CLIENT_SECRET"),
+		ClientID:     client_id.Value,
+		ClientSecret: client_secret.Value,
 		RedirectURL:  "http://localhost.automyself.com:8080/auth/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
@@ -88,13 +98,71 @@ func LoginExchangeProvider(c *gin.Context, a *app.App) {
 }
 
 func Refresh(c *gin.Context, a *app.App) {
+
+	fmt.Printf("Scheme: %s, Host: %s\n", c.Request.URL.Scheme, c.Request.URL.Host)
+
+	var userProvidedToken = struct {
+		RefreshToken string `json:"refresh_token"`
+	}{}
+
+	if err := c.ShouldBindJSON(&userProvidedToken); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Required key: `refresh_token`"})
+		return
+	}
+
+	fmt.Println(userProvidedToken.RefreshToken)
+
+	hash := sha256.Sum256([]byte(userProvidedToken.RefreshToken))
+	hashedUserToken := fmt.Sprintf("%x", hash[:])
+
+	var refreshToken models.RefreshToken
+	if err := a.Gorm.First(&refreshToken, "token = ?", hashedUserToken).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		return
+	}
+
+	a.Gorm.Model(&refreshToken).Association("User").Find(&refreshToken.User)
+
+	if err := a.Gorm.Delete(&refreshToken).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete refresh token"})
+		return
+	}
+
+	jwt, err := refreshToken.User.GenerateJWT(a)
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	refresh, err := refreshToken.User.GenerateRefreshToken(a.Gorm)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"jwt": jwt, "refresh": refresh})
+
 }
 
 func googleRedirect(c *gin.Context, a *app.App) {
+	domain, err := a.Secrets.Get("DOMAIN")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client_id, err := a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_ID")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client_secret, err := a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET")
+	if err != nil {
+		log.Fatal(err)
+	}
 	conf := &oauth2.Config{
-		ClientID:     helpers.GetSecret("GOOGLE_WEB_CLIENT_ID"),
-		ClientSecret: helpers.GetSecret("GOOGLE_WEB_CLIENT_SECRET"),
-		RedirectURL:  "http://localhost.automyself.com:8080/auth/callback/google",
+		ClientID:     client_id.Value,
+		ClientSecret: client_secret.Value,
+		RedirectURL:  domain.Value + "/auth/callback/google",
+		// RedirectURL: c.Request.URL.Scheme + "://" + c.Request.URL.Host + "/auth/callback/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
@@ -121,11 +189,24 @@ func LoginWebProvider(c *gin.Context, a *app.App) {
 	}
 }
 
-func googleCallback(c *gin.Context, a *app.App) {
+func googleCallback(c *gin.Context, a *app.App) (models.User, error) {
+	client_id, err := a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_ID")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client_secret, err := a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET")
+	if err != nil {
+		log.Fatal(err)
+	}
+	domain, err := a.Secrets.Get("DOMAIN")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	conf := &oauth2.Config{
-		ClientID:     helpers.GetSecret("GOOGLE_WEB_CLIENT_ID"),
-		ClientSecret: helpers.GetSecret("GOOGLE_WEB_CLIENT_SECRET"),
-		RedirectURL:  "http://localhost.automyself.com:8080/auth/callback/google",
+		ClientID:     client_id.Value,
+		ClientSecret: client_secret.Value,
+		RedirectURL:  domain.Value + "/auth/callback/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
@@ -137,27 +218,24 @@ func googleCallback(c *gin.Context, a *app.App) {
 	code := c.Query("code")
 	if code == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Code not found in query parameters"})
-		return
+		return models.User{}, errors.New("Code not found in query parameters")
 	}
 
 	tok, err := conf.Exchange(c, code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code for token"})
-		return
+		return models.User{}, errors.New("Failed to exchange code for token")
 	}
 
 	client := conf.Client(c, tok)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
-		return
+		return models.User{}, errors.New("Failed to get user info")
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read user info response"})
-		return
+		return models.User{}, errors.New("Failed to read user info response")
 	}
 	log.Printf("Google user info response: %s", string(body))
 
@@ -172,49 +250,37 @@ func googleCallback(c *gin.Context, a *app.App) {
 	}
 	googleData := googleUserInfo{}
 	if err := json.Unmarshal(body, &googleData); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode user info"})
-		return
+		return models.User{}, errors.New("Failed to decode user info")
 	}
 
-	identity := models.Identity{
-		IdentityBase: models.IdentityBase{
-			Provider: "google",
-			Subject:  googleData.Sub,
-			Email:    googleData.Email,
-		},
+	identity, err := gorm.G[models.Identity](a.Gorm).Where("provider = ? AND subject = ?", "google", googleData.Sub).First(c)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.User{}, err
 	}
 
-	if err := a.Gorm.Where(&identity.IdentityBase).FirstOrCreate(&identity).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find or create user"})
-		return
-	}
-
-	if identity.UserID == uuid.Nil {
-		identity.User = models.User{
-			UserBase: models.UserBase{
-				Username: googleData.Name,
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		identity = models.Identity{
+			IdentityBase: models.IdentityBase{
+				Provider: "google",
+				Subject:  googleData.Sub,
+				Email:    googleData.Email,
+			},
+			User: models.User{
+				UserBase: models.UserBase{
+					Username: googleData.Name,
+				},
 			},
 		}
-		if err := a.Gorm.Create(&identity.User).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create new user"})
-			return
-		}
-		identity.UserID = identity.User.ID
-		if err := a.Gorm.Save(&identity).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update identity with new user"})
-			return
+
+		err = gorm.G[models.Identity](a.Gorm).Create(c, &identity)
+		if err != nil {
+			return models.User{}, err
 		}
 	} else {
 		a.Gorm.Model(&identity).Association("User").Find(&identity.User)
 	}
 
-	token, err := identity.User.GenerateJWT()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"authentication": "Bearer " + token})
+	return identity.User, nil
 }
 
 func appleCallback(c *gin.Context, a *app.App) {
@@ -222,14 +288,37 @@ func appleCallback(c *gin.Context, a *app.App) {
 
 func LoginWebCallback(c *gin.Context, a *app.App) {
 	provider := c.Param("provider")
+	var user models.User
+	var err error
+
 	switch provider {
 	case "google":
-		googleCallback(c, a)
+		user, err = googleCallback(c, a)
 	case "apple":
 		appleCallback(c, a)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
 	}
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	jwt, err := user.GenerateJWT(a)
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	refresh, err := user.GenerateRefreshToken(a.Gorm)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"jwt": jwt, "refresh": refresh})
 }
 
 type DevelopmentLoginRequest struct {
@@ -245,20 +334,22 @@ func LoginDevelopment(c *gin.Context, a *app.App) {
 
 	var developmentLoginRequest DevelopmentLoginRequest
 	if err := c.ShouldBindJSON(&developmentLoginRequest); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		c.Status(http.StatusUnprocessableEntity)
 		return
 	}
 
-	user := models.User{}
-	result := a.Gorm.First(&user, "id = ?", developmentLoginRequest.UserID)
-	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+	user, err := gorm.G[models.User](a.Gorm).Where("id = ?", developmentLoginRequest.UserID).First(c)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.AbortWithError(http.StatusNotFound, err)
+		return
+	} else if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	token, err := user.GenerateJWT()
+	token, err := user.GenerateJWT(a)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 

@@ -54,6 +54,24 @@ CREATE TRIGGER update_identities_updated_at
    BEFORE UPDATE ON "identities"
    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
+CREATE TABLE "refresh_tokens" (
+    "id" uuid NOT NULL,
+    "user_id" uuid NOT NULL,
+    "token" text NOT NULL,
+    "expires_at" timestamptz NOT NULL DEFAULT now() + interval '30 days',
+    "created_at" timestamptz NOT NULL DEFAULT now(),
+    "updated_at" timestamptz NOT NULL DEFAULT now(),
+    "deleted_at" timestamptz NULL,
+    CONSTRAINT "refresh_tokens_pk" PRIMARY KEY ("id"),
+    CONSTRAINT "refresh_tokens_users" FOREIGN KEY ("user_id") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE
+);
+
+CREATE UNIQUE INDEX "refresh_tokens_idx_1" ON "refresh_tokens" ("token" ASC);
+
+CREATE TRIGGER update_refresh_tokens_updated_at
+   BEFORE UPDATE ON "refresh_tokens"
+   FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
 CREATE TABLE "files" (
     "id" uuid NOT NULL,
     "storage_key" text NOT NULL,
@@ -205,4 +223,30 @@ CREATE TABLE "maintenance_record_files" (
 
 CREATE TRIGGER update_maintenance_record_files_updated_at
    BEFORE UPDATE ON "maintenance_record_files"
+   FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
+CREATE TABLE "reports" (
+    "id" uuid NOT NULL,
+    "reported_table" text NOT NULL,
+    "reported_id" uuid NOT NULL,
+    "reason" text NULL,
+    "created_by" uuid NOT NULL,
+    "resolved" boolean NOT NULL DEFAULT false,
+    "resolved_by" uuid NULL,
+    "resolved_at" timestamptz NULL,
+    "internal_notes" text NULL,
+    "created_at" timestamptz NOT NULL DEFAULT now(),
+    "updated_at" timestamptz NOT NULL DEFAULT now(),
+    "deleted_at" timestamptz NULL,
+    CONSTRAINT "reports_pk" PRIMARY KEY ("id"),
+    CONSTRAINT "reports_users_created_by" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT "reports_users_resolved_by" FOREIGN KEY ("resolved_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE
+);
+
+CREATE INDEX "reports_idx_1" on "reports" ("created_by" ASC);
+
+CREATE INDEX "reports_idx_2" on "reports" ("resolved_by" ASC);
+
+CREATE TRIGGER update_reports_updated_at
+   BEFORE UPDATE ON "reports"
    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();

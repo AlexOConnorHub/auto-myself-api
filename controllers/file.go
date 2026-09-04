@@ -152,51 +152,46 @@ func CreateFileForTypeByID(c *gin.Context, a *app.App) {
 	}
 }
 
-func DeleteFileForTypeByID(c *gin.Context, a *app.App) {
-	fileType := c.Param("record_type")
+func DeleteFileByID(c *gin.Context, a *app.App) {
 	uuid := c.MustGet("uuid_param").(uuid.UUID)
 	user := c.MustGet("user").(*models.User)
 
-	if fileType == "direct" {
-		var file models.File
-		if err := a.Gorm.Where("id = ?", uuid).First(&file).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				c.JSON(404, gin.H{"error": "File not found"})
-			} else {
-				c.JSON(500, gin.H{"error": "Database error"})
-			}
-			return
+	var file models.File
+	if err := a.Gorm.Where("id = ?", uuid).First(&file).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(404, gin.H{"error": "File not found"})
+		} else {
+			c.JSON(500, gin.H{"error": "Database error"})
 		}
+		return
+	}
 
-		var maintenanceRecordLink models.MaintenanceRecordFile
-		if err := a.Gorm.Where("file_id = ?", file.ID).First(&maintenanceRecordLink).Error; err != nil {
-			if err != gorm.ErrRecordNotFound {
-				c.JSON(500, gin.H{"error": "Database error"})
-				return
-			}
-		}
-		if !maintenanceRecordLink.ID.IsNil() { // Is maintenance record file
-			a.Gorm.Model(&maintenanceRecordLink).Association("MaintenanceRecord").Find(&maintenanceRecordLink.MaintenanceRecord)
-			a.Gorm.Model(&maintenanceRecordLink.MaintenanceRecord).Association("Vehicle").Find(&maintenanceRecordLink.MaintenanceRecord.Vehicle)
-
-			if !maintenanceRecordLink.MaintenanceRecord.Vehicle.CanWrite(a, user) {
-				if !maintenanceRecordLink.MaintenanceRecord.Vehicle.CanRead(a, user) {
-					c.JSON(404, gin.H{"error": "File not found"})
-				} else {
-					c.JSON(403, gin.H{"error": "Forbidden"})
-				}
-				return
-			}
-
-			if err := maintenanceRecordLink.DeleteWithFile(a); err != nil {
-				c.JSON(500, gin.H{"error": "Failed to delete file from storage"})
-				return
-			}
-
-			c.Status(204)
+	var maintenanceRecordLink models.MaintenanceRecordFile
+	if err := a.Gorm.Where("file_id = ?", file.ID).First(&maintenanceRecordLink).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			c.JSON(500, gin.H{"error": "Database error"})
 			return
 		}
 	}
+	if !maintenanceRecordLink.ID.IsNil() { // Is maintenance record file
+		a.Gorm.Model(&maintenanceRecordLink).Association("MaintenanceRecord").Find(&maintenanceRecordLink.MaintenanceRecord)
+		a.Gorm.Model(&maintenanceRecordLink.MaintenanceRecord).Association("Vehicle").Find(&maintenanceRecordLink.MaintenanceRecord.Vehicle)
 
-	c.JSON(400, gin.H{"error": "Invalid file type"})
+		if !maintenanceRecordLink.MaintenanceRecord.Vehicle.CanWrite(a, user) {
+			if !maintenanceRecordLink.MaintenanceRecord.Vehicle.CanRead(a, user) {
+				c.JSON(404, gin.H{"error": "File not found"})
+			} else {
+				c.JSON(403, gin.H{"error": "Forbidden"})
+			}
+			return
+		}
+
+		if err := maintenanceRecordLink.DeleteWithFile(a); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to delete file from storage"})
+			return
+		}
+
+		c.Status(204)
+		return
+	}
 }
