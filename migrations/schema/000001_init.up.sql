@@ -25,6 +25,7 @@ CREATE TABLE "users" (
     "id" uuid NOT NULL,
     "username" text NOT NULL,
     "email" text NULL,
+    "role" text NOT NULL,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
@@ -227,7 +228,7 @@ CREATE TRIGGER update_maintenance_record_files_updated_at
 
 CREATE TABLE "reports" (
     "id" uuid NOT NULL,
-    "reported_table" text NOT NULL,
+    "reported_topic" text NOT NULL,
     "reported_id" uuid NOT NULL,
     "reason" text NULL,
     "created_by" uuid NOT NULL,

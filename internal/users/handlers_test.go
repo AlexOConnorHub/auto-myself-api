@@ -1,0 +1,172 @@
+package users
+
+import (
+	"auto-myself-api/internal/helpers"
+	"auto-myself-api/internal/server"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+)
+
+var AllUsers = [][]string{
+	{"019785fe-4eb4-766e-9c45-bec7780972a2", "User 1"},
+	{"019785fe-4eb4-766e-9c45-c1f83e7c1f1f", "User 2"},
+	{"019785fe-4eb4-766e-9c45-c497f2d9fe9e", "User 3"},
+	{"019785fe-4eb4-766e-9c45-c8578456b4df", "User 4"},
+	{"019785fe-4eb4-766e-9c45-cec136a9ad6f", "User 5"},
+	{"019785fe-4eb4-766e-9c45-f592a1187d0c", "User 6"},
+	{"019785fe-4eb4-766e-9c45-f9cd4ee5c0b3", "User 7"},
+	{"019785fe-4eb4-766e-9c45-fc6ed4a7407b", "User 8"},
+}
+
+var UserFields = map[string]int{
+	"uuid":     0,
+	"username": 1,
+}
+
+var UserAccessMatrix = [8][8]int{
+	{helpers.WRITE, helpers.READ_ONLY, helpers.READ_ONLY, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY},
+	{helpers.READ_ONLY, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY},
+	{helpers.READ_ONLY, helpers.READ_ONLY, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY},
+	{helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS},
+	{helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS},
+	{helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.WRITE, helpers.READ_ONLY, helpers.READ_ONLY},
+	{helpers.READ_ONLY, helpers.READ_ONLY, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.WRITE, helpers.READ_ONLY},
+	{helpers.READ_ONLY, helpers.READ_ONLY, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY, helpers.WRITE},
+}
+
+func validateUserResponse(marshaledResponse UserWeb, expected UserWeb) string {
+	if marshaledResponse.Username != expected.Username {
+		return fmt.Sprintf("Expected username to be %s, got %s", expected.Username, marshaledResponse.Username)
+	}
+	return ""
+}
+
+func loadUser(index int) UserWeb {
+	user := AllUsers[index]
+	return UserWeb{
+		UserPost: UserPost{
+			Username: user[1],
+		},
+	}
+}
+
+func TestUsersVerifyAllExist(t *testing.T) {
+	r, _ := server.SetupTest(t)
+
+	for index, userRow := range AllUsers {
+		uuid := userRow[0]
+		user := loadUser(index)
+
+		w := helpers.TestRequestAsUser(r, "GET", "/v1/user", uuid, nil)
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+		}
+
+		var firstBody = w.Body.String()
+
+		var response UserWeb
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v. Body: %s", err, w.Body.String())
+		}
+
+		if errMsg := validateUserResponse(response, user); errMsg != "" {
+			t.Error("User response validation failed:", errMsg)
+		}
+
+		w = helpers.TestRequestAsUser(r, "GET", "/v1/user/"+uuid, uuid, nil)
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+		}
+
+		if w.Body.String() == firstBody {
+			t.Error("User accessing own data should be different than accessing via by uuid endpoint")
+		}
+	}
+}
+
+func TestUserPatch(t *testing.T) {
+	r, _ := server.SetupTest(t)
+
+	userRow := AllUsers[0]
+	uuid := userRow[0]
+	user := loadUser(0)
+	modified := UserWeb{
+		UserPost: UserPost{
+			Username: "MODIFIED " + user.Username,
+		},
+	}
+	user.Username = modified.Username
+
+	bodyBytes, err := json.Marshal(modified)
+	if err != nil {
+		t.Fatalf("Failed to marshal testUserModel: %v", err)
+	}
+	bodyReader := bytes.NewReader(bodyBytes)
+
+	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/user", uuid, bodyReader)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response UserWeb
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
+
+	if errMsg := validateUserResponse(response, user); errMsg != "" {
+		t.Error("User response validation failed:", errMsg)
+	}
+}
+
+func TestUserReadPermissions(t *testing.T) {
+	r, _ := server.SetupTest(t)
+
+	var successMatrix [8][8]string
+
+	for authUser, access := range UserAccessMatrix {
+		for readUser, permission := range access {
+			authUUID := AllUsers[authUser][0]
+			readUUID := AllUsers[readUser][0]
+			expected := loadUser(readUser)
+
+			w := helpers.TestRequestAsUser(r, "GET", "/v1/user/"+readUUID, authUUID, nil)
+			if w.Code == http.StatusOK {
+				if permission == helpers.NO_ACCESS {
+					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
+					continue
+				}
+				var response UserWeb
+				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+					successMatrix[authUser][readUser] = fmt.Sprintf("Failed to unmarshal response: %v", err)
+					continue
+				}
+
+				if errMsg := validateUserResponse(response, expected); errMsg != "" {
+					successMatrix[authUser][readUser] = fmt.Sprintf("User response validation failed: %s", errMsg)
+					continue
+				}
+			} else if w.Code == http.StatusNotFound {
+				if permission > helpers.NO_ACCESS {
+					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusOK, w.Code)
+					continue
+				}
+			} else {
+				successMatrix[authUser][readUser] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, readUUID)
+				continue
+			}
+		}
+	}
+
+	for authUser, access := range successMatrix {
+		for readUser, errorMessage := range access {
+			if errorMessage != "" {
+				authUserName := AllUsers[authUser][1]
+				readUserName := AllUsers[readUser][1]
+				t.Errorf("Auth User %s reading User %s: %s", authUserName, readUserName, errorMessage)
+			}
+		}
+	}
+}

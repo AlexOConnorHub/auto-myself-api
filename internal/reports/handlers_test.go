@@ -1,0 +1,32 @@
+package reports
+
+import (
+	"auto-myself-api/internal/helpers"
+	"auto-myself-api/internal/server"
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"testing"
+)
+
+func TestReport(t *testing.T) {
+	r, _ := server.SetupTest(t)
+
+	userUuid := users.AllUsers[0][0]
+
+	body := map[string]interface{}{
+		"reported_table": "users",
+		"reported_id":    users.AllUsers[1][0],
+		"reason":         "Test reason",
+	}
+
+	bodyReader := bytes.NewReader([]byte{})
+	if b, err := json.Marshal(body); err == nil {
+		bodyReader = bytes.NewReader(b)
+	}
+
+	w := helpers.TestRequestAsUser(r, "POST", "/v1/report", userUuid, bodyReader)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status code %d for report creation, got %d\n%s", http.StatusCreated, w.Code, w.Body.String())
+	}
+}
