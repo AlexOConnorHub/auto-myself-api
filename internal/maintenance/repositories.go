@@ -11,6 +11,7 @@ import (
 
 type MaintenanceRepository interface {
 	FindIDs(context.Context, uuid.UUID) ([]uuid.UUID, error)
+	FindForVehicle(context.Context, uuid.UUID) ([]MaintenanceRecord, error)
 	FindByID(context.Context, uuid.UUID) (*MaintenanceRecord, error)
 	UpdateByID(context.Context, uuid.UUID, int64, *MaintenanceRecord) error
 	DeleteByID(context.Context, uuid.UUID) error
@@ -39,6 +40,13 @@ func (r *Repository) FindIDs(ctx context.Context, vehicleID uuid.UUID) ([]uuid.U
 	}
 
 	return idsUUID, nil
+}
+
+func (r *Repository) FindForVehicle(ctx context.Context, vehicleID uuid.UUID) ([]MaintenanceRecord, error) {
+	return gorm.G[MaintenanceRecord](r.database.GetGorm()).
+		Where("vehicle_id = ?", vehicleID).
+		Order(`"timestamp" ASC, id ASC`).
+		Find(ctx)
 }
 
 func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*MaintenanceRecord, error) {

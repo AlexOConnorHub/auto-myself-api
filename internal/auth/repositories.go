@@ -20,6 +20,7 @@ import (
 type AuthRepository interface {
 	FindUserByID(context.Context, uuid.UUID) (*users.User, error)
 	FindUserByProviderAndSubject(context.Context, string, string) (*users.User, error)
+	FindIdentitiesForUser(context.Context, uuid.UUID) ([]Identity, error)
 	CreateUserWithIdentity(context.Context, *users.User, *Identity) error
 	CreateRefreshToken(context.Context, *RefreshToken) error
 	RotateRefreshToken(context.Context, uuid.UUID, string, *RefreshToken) (uuid.UUID, error)
@@ -56,6 +57,13 @@ func (r *Repository) FindUserByProviderAndSubject(ctx context.Context, provider 
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *Repository) FindIdentitiesForUser(ctx context.Context, userID uuid.UUID) ([]Identity, error) {
+	return gorm.G[Identity](r.database.GetGorm()).
+		Where("user_id = ?", userID).
+		Order("created_at ASC").
+		Find(ctx)
 }
 
 func (r *Repository) CreateUserWithIdentity(ctx context.Context, user *users.User, identity *Identity) error {

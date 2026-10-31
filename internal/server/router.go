@@ -3,6 +3,7 @@ package server
 import (
 	"auto-myself-api/internal/auth"
 	"auto-myself-api/internal/database"
+	"auto-myself-api/internal/export"
 	"auto-myself-api/internal/files"
 	"auto-myself-api/internal/maintenance"
 	"auto-myself-api/internal/middleware"
@@ -30,6 +31,7 @@ type Handlers struct {
 	File        *files.Handler
 	Share       *shares.Handler
 	Report      *reports.Handler
+	Export      *export.Handler
 }
 
 func Build(d Dependencies) *Handlers {
@@ -63,6 +65,9 @@ func Build(d Dependencies) *Handlers {
 	authService := auth.NewAuthService(authRepository, tokenService, oauthRepository, d.Secrets)
 	authHandler := auth.NewAuthHandler(authService)
 
+	exportService := export.NewService(authRepository, vehicleRepository, maintenanceRepository, fileRepository, reportRepository, d.Storage)
+	exportHandler := export.NewExportHandler(exportService)
+
 	return &Handlers{
 		Auth:        authHandler,
 		User:        userHandler,
@@ -71,6 +76,7 @@ func Build(d Dependencies) *Handlers {
 		File:        fileHandler,
 		Share:       shareHandler,
 		Report:      reportHandler,
+		Export:      exportHandler,
 	}
 }
 
@@ -80,16 +86,22 @@ func NewEngine() *gin.Engine {
 	r.Use(middleware.Logger())
 	r.TrustedPlatform = gin.PlatformGoogleAppEngine
 
-	if gin.Mode() == gin.ReleaseMode {
-		r.Use(timeout.New())
-	}
-
 	return r
 }
 
 func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
+	isRelease := gin.Mode() == gin.ReleaseMode
+
+	var timeoutMiddleware gin.HandlerFunc
+	if isRelease {
+		timeoutMiddleware = timeout.New()
+	}
+
 	authGroup := r.Group("/auth")
-	if gin.Mode() == gin.ReleaseMode {
+	if timeoutMiddleware != nil {
+		authGroup.Use(timeoutMiddleware)
+	}
+	if isRelease {
 		authGroup.Use(middleware.RateLimitMiddleware())
 	}
 	{
@@ -99,12 +111,19 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 		authGroup.POST("/refresh", h.Auth.RefreshToken)
 	}
 
-	v1 := r.Group("/v1")
-	v1.Use(middleware.AuthMiddleware(d.Secrets, users.NewUserRepository(d.Database)))
-	v1.Use(middleware.ParseUUIDMiddleware())
-	if gin.Mode() == gin.ReleaseMode {
-		v1.Use(middleware.UserRateLimitMiddleware())
+	v1Middleware := []gin.HandlerFunc{
+		middleware.AuthMiddleware(d.Secrets, users.NewUserRepository(d.Database)),
+		middleware.ParseUUIDMiddleware(),
 	}
+	if isRelease {
+		v1Middleware = append(v1Middleware, middleware.UserRateLimitMiddleware())
+	}
+
+	v1 := r.Group("/v1")
+	if timeoutMiddleware != nil {
+		v1.Use(timeoutMiddleware)
+	}
+	v1.Use(v1Middleware...)
 	{
 		userGroup := v1.Group("/user")
 		{
@@ -165,4 +184,8 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 			reportGroup.PATCH("/:uuid", h.Report.UpdateByID)
 		}
 	}
+
+	exportGroup := r.Group("/v1")
+	exportGroup.Use(v1Middleware...) // Does not include same timeout
+	exportGroup.GET("/user/export", h.Export.Download)
 }

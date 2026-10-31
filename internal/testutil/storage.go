@@ -8,10 +8,11 @@ import (
 )
 
 type FakeStorage struct {
-	mu         sync.Mutex
-	objects    map[string][]byte
-	FailUpload bool
-	FailDelete bool
+	mu               sync.Mutex
+	objects          map[string][]byte
+	FailUpload       bool
+	FailDelete       bool
+	lastSignedURLTTL time.Duration
 }
 
 func NewFakeStorage() *FakeStorage {
@@ -43,7 +44,17 @@ func (s *FakeStorage) Delete(ctx context.Context, key string) error {
 }
 
 func (s *FakeStorage) SignedURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	s.mu.Lock()
+	s.lastSignedURLTTL = ttl
+	s.mu.Unlock()
 	return "https://storage.test/" + key, nil
+}
+
+// LastSignedURLTTL reports the TTL of the most recent SignedURL call.
+func (s *FakeStorage) LastSignedURLTTL() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastSignedURLTTL
 }
 
 func (s *FakeStorage) Get(key string) ([]byte, bool) {
