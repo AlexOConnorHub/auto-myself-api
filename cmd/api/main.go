@@ -10,11 +10,15 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	configureGinMode()
 
 	engine := server.NewEngine()
 
@@ -49,4 +53,10 @@ func main() {
 		log.Printf("Server Shutdown: %s", err)
 	}
 	log.Println("Server exiting")
+}
+
+func configureGinMode() {
+	if os.Getenv(gin.EnvGinMode) == "" {
+		gin.SetMode(gin.ReleaseMode) // Override default of debug mode
+	}
 }

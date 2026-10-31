@@ -28,7 +28,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE auto_myself_admin IN SCHEMA public GRANT USAGE
 ### .env
 
 ```
-GIN_MODE='debug' # Debug/test use environment variables; release uses Secret Manager
+GIN_MODE='debug' # Optional; unset defaults to release. Debug/test use environment variables; release uses Secret Manager
 GOOGLE_CLOUD_PROJECT_NUMERIC= # For interacting with Google Cloud APIs, such as Secret Manager
 GOOGLE_CLOUD_PROJECT= # For interacting with Google Cloud APIs, such as Cloud Storage
 DOMAIN='https://api.example.com' # OAuth redirect base; the callback is /auth/web/callback/google
@@ -42,8 +42,9 @@ POSTGRES_URL='app_user:app_user_password@localhost:5432/appdb' # For use with th
 ```
 
 `DOMAIN`, `POSTGRES_DSN`, `GOOGLE_OAUTH2_CLIENT_ID`, `GOOGLE_OAUTH2_CLIENT_SECRET`, and
-`JWT_SIGNING_SECRET` are required. In `GIN_MODE=debug` or `test` the API reads them from the
-environment; in `release` it reads Secret Manager and fails fast if any are missing.
+`JWT_SIGNING_SECRET` are required.
+In `GIN_MODE=debug` or `test` the API reads them from the environment; in `release` it reads Secret
+Manager and fails fast if any are missing.
 
 ### Running the API
 
