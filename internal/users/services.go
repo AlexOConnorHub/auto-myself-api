@@ -3,43 +3,57 @@ package users
 import (
 	"auto-myself-api/internal/helpers"
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gofrs/uuid/v5"
+	"gorm.io/gorm"
 )
 
 type UserService interface {
-	UpdateUser(context.Context, UserPost) error
+	UpdateUser(context.Context, *User) error
 	GetUserByID(context.Context, uuid.UUID) (*User, error)
 }
 
-type userService struct {
-	userRepository *userRepository
+type Service struct {
+	userRepository *Repository
 }
 
-func NewUserService(userRepository *userRepository) *userService {
-	return &userService{
+func NewUserService(userRepository *Repository) *Service {
+	return &Service{
 		userRepository: userRepository,
 	}
 }
 
-func (s *userService) GetUserByID(ctx context.Context, userUUID uuid.UUID) (*User, error) {
+func (s *Service) GetUserByID(ctx context.Context, userUUID uuid.UUID) (*User, error) {
 	currentUser := ctx.Value(helpers.UserCtxKey).(*User)
 
-	if canRead, err := s.userRepository.CanRead(ctx, currentUser.ID, userUUID); err != nil {
-		return nil, fmt.Errorf("userService.GetUserByID: %w", err)
-	} else if !canRead {
-		return nil, helpers.ErrAccessDenied
+	canRead, err := s.userRepository.CanRead(ctx, currentUser.ID, userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("checking read access to user %s: %w", userUUID, err)
+	}
+	if !canRead {
+		return nil, gorm.ErrRecordNotFound
 	}
 
-	if user, err := s.userRepository.FindUserByID(ctx, userUUID); err != nil {
-		return nil, fmt.Errorf("userService.GetUserByID: %w", err)
-	} else {
-		return user, nil
+	requestedUser, err := s.userRepository.FindByID(ctx, userUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("finding user %s: %w", userUUID, err)
 	}
+
+	return requestedUser, nil
 }
 
-func (s *userService) UpdateUser(ctx context.Context, input UserPost) error {
-	user := ctx.Value(helpers.UserCtxKey).(*User)
-	return s.userRepository.UpdateUser(ctx, user.ID, input)
+// UpdateUser applies user to the current user's row and replaces user with the persisted row.
+// The caller decides which fields are set; the HTTP handler fills only the Post section.
+func (s *Service) UpdateUser(ctx context.Context, user *User) error {
+	currentUser := ctx.Value(helpers.UserCtxKey).(*User)
+
+	if err := s.userRepository.UpdateByID(ctx, currentUser.ID, user); err != nil {
+		return fmt.Errorf("updating user %s: %w", currentUser.ID, err)
+	}
+	return nil
 }

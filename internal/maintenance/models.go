@@ -1,13 +1,14 @@
 package maintenance
 
 import (
+	"auto-myself-api/internal/helpers"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
-type MaintenanceRecordPost struct {
+type MaintenanceRecordFields struct {
 	Cost         string    `json:"cost,omitempty" gorm:"type:decimal(10,2)"`
 	Odometer     int       `json:"odometer,omitempty" gorm:"type:integer"`
 	Timestamp    time.Time `json:"timestamp,omitempty" gorm:"type:date"`
@@ -15,7 +16,16 @@ type MaintenanceRecordPost struct {
 	Type         string    `json:"type,omitempty" gorm:"type:text"`
 	Interval     int       `json:"interval,omitempty" gorm:"type:integer"`
 	IntervalType string    `json:"interval_type,omitempty" gorm:"type:text"`
-	VehicleID    uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
+}
+
+type MaintenanceRecordPost struct {
+	MaintenanceRecordFields
+	VehicleID uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null" binding:"required"`
+}
+
+// MaintenanceRecordUpdatePost omits VehicleID as it may not change
+type MaintenanceRecordUpdatePost struct {
+	MaintenanceRecordFields
 }
 
 type MaintenanceRecordWeb struct {
@@ -36,8 +46,5 @@ func (MaintenanceRecord) TableName() string {
 }
 
 func (m *MaintenanceRecord) BeforeCreate(tx *gorm.DB) (err error) {
-	if m.ID.IsNil() {
-		m.ID, err = uuid.NewV7()
-	}
-	return err
+	return helpers.BeforeCreateID(tx, m)
 }

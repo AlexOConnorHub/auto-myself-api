@@ -1,220 +1,201 @@
 package auth
 
 import (
-	"auto-myself-api/internal/server"
+	"auto-myself-api/internal/secrets"
 	"auto-myself-api/internal/users"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"log"
-	"os"
+	"strings"
+	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid/v5"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"gorm.io/gorm"
 )
 
+var (
+	ErrUnsupportedProvider      = errors.New("unsupported provider")
+	ErrUnableToHashRefreshToken = errors.New("unable to hash refresh token")
+	ErrInvalidRefreshToken      = errors.New("invalid refresh token")
+)
+
+const (
+	refreshTokenTTL        = 30 * 24 * time.Hour
+	refreshTokenBcryptCost = 13
+	jwtTTL                 = 15 * time.Minute
+	jwtIssuer              = "auto-myself-auth"
+	jwtAudience            = "auto-myself-api"
+)
+
 type AuthService interface {
-	// FindUserByRefreshToken(string) (string, error)
 	LoginWebInitiate(context.Context, string) (string, error)
 	LoginWebCallback(context.Context, string, string) (*UserAuthResponse, error)
 	RefreshToken(context.Context, RefreshTokenRequest) (*UserAuthResponse, error)
 	DevelopmentLogin(context.Context, DevelopmentLoginRequest) (*UserAuthResponse, error)
 }
 
-type authService struct {
-	authRepository *authRepository
-	tokenService   *tokenService
+type Service struct {
+	authRepository  *Repository
+	tokenService    *TokenService
+	oauthRepository OAuthRepository
+	secrets         *secrets.SecretStore
 }
 
-func NewAuthService(authRepository *authRepository, tokenService *tokenService) *authService {
-	return &authService{
-		authRepository: authRepository,
-		tokenService:   tokenService,
+func NewAuthService(
+	authRepository *Repository,
+	tokenService *TokenService,
+	oauthRepository OAuthRepository,
+	secretStore *secrets.SecretStore,
+) *Service {
+	return &Service{
+		authRepository:  authRepository,
+		tokenService:    tokenService,
+		oauthRepository: oauthRepository,
+		secrets:         secretStore,
 	}
 }
 
-func googleProvider(c *gin.Context, a *server.App) {
-	conf := &oauth2.Config{
-		ClientID:     a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_ID").Value,
-		ClientSecret: a.Secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET").Value,
-		RedirectURL:  "http://localhost.automyself.com:8080/auth/google",
-		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/userinfo.profile",
-			"openid",
-		},
-		Endpoint: google.Endpoint,
-	}
-	// Redirect user to Google's consent page to ask for permission
-	// for the scopes specified above.
-	url := conf.AuthCodeURL("state")
-	fmt.Printf("Visit the URL for the auth dialog: %v", url)
+// placeholderOAuthState keeps the provider round trip conventional. These web endpoints do not
+// bind state to a browser session; they are a stepping stone to the mobile PKCE flow, which will
+// add proper state/verifier binding.
+const placeholderOAuthState = "state"
 
-	// Handle the exchange code to initiate a transport.
-	tok, err := conf.Exchange(c, "authorization-code")
+func (s *Service) LoginWebInitiate(ctx context.Context, provider string) (string, error) {
+	if provider != "google" {
+		return "", ErrUnsupportedProvider
+	}
+
+	conf, err := s.oauthConfig()
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
-	client := conf.Client(c, tok)
-	client.Get("...")
+	return s.oauthRepository.AuthCodeURL(conf, placeholderOAuthState), nil
 }
 
-func appleProvider(c *gin.Context, a *server.App) {
-}
-
-func (s *authService) LoginWebInitiate(ctx context.Context, provider string) (string, error) {
-	switch provider {
-	case "google":
-		return s.googleWebInitiate(ctx)
-	// case "apple":
-	// Implement Apple provider login logic here
-	default:
-		return "", fmt.Errorf("unsupported provider: %s", provider)
-	}
-}
-
-func (s *authService) LoginWebCallback(ctx context.Context, provider string, code string) (*UserAuthResponse, error) {
+func (s *Service) LoginWebCallback(ctx context.Context, provider string, code string) (*UserAuthResponse, error) {
 	switch provider {
 	case "google":
 		return s.googleWebCallback(ctx, code)
 	default:
-		return nil, fmt.Errorf("unsupported provider: %s", provider)
+		return nil, ErrUnsupportedProvider
 	}
 }
 
-func (s *authService) RefreshToken(ctx context.Context, request RefreshTokenRequest) (*UserAuthResponse, error) {
-	hash := sha256.Sum256([]byte(request.RefreshToken))
-	hashedUserToken := fmt.Sprintf("%x", hash[:])
-
-	user, err := s.authRepository.FindUserByRefreshToken(ctx, hashedUserToken)
+func (s *Service) RefreshToken(ctx context.Context, request RefreshTokenRequest) (*UserAuthResponse, error) {
+	user, newRefreshToken, err := s.tokenService.RotateRefreshToken(ctx, request.RefreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("authService.RefreshToken: %w", err)
-	}
-	if user == nil {
-		return nil, fmt.Errorf("authService.RefreshToken: user not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("rotating refresh token: %w", err)
 	}
 
-	userAuth, err := s.userToUserAuthResponse(user)
+	jwt, err := s.tokenService.GenerateJWT(user)
 	if err != nil {
-		return nil, fmt.Errorf("authService.RefreshToken: %w", err)
+		return nil, fmt.Errorf("generating jwt for user %s: %w", user.ID, err)
 	}
 
-	return userAuth, nil
+	return &UserAuthResponse{JWT: jwt, Refresh: newRefreshToken}, nil
 }
 
-func (s *authService) DevelopmentLogin(ctx context.Context, request DevelopmentLoginRequest) (*UserAuthResponse, error) {
-	user, err := s.authRepository.FindUserByID(ctx, request.UserID)
+func (s *Service) DevelopmentLogin(ctx context.Context, request DevelopmentLoginRequest) (*UserAuthResponse, error) {
+	userID, err := uuid.FromString(request.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("authService.DevelopmentLogin: %w", err)
+		return nil, fmt.Errorf("parsing development user id: %w", err)
 	}
 
-	return s.userToUserAuthResponse(user)
+	user, err := s.authRepository.FindUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("finding development user %s: %w", userID, err)
+	}
+
+	return s.userToUserAuthResponse(ctx, user)
 }
 
-func (s *authService) googleWebInitiate(ctx context.Context) (string, error) {
-	conf := &oauth2.Config{
-		ClientID:     s.authRepository.secrets.Get("GOOGLE_OAUTH2_CLIENT_ID").Value,
-		ClientSecret: s.authRepository.secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET").Value,
-		RedirectURL:  os.Getenv("DOMAIN") + "/auth/callback/google",
+func (s *Service) oauthConfig() (*oauth2.Config, error) {
+	clientID, err := s.secrets.Get("GOOGLE_OAUTH2_CLIENT_ID")
+	if err != nil {
+		return nil, fmt.Errorf("reading GOOGLE_OAUTH2_CLIENT_ID: %w", err)
+	}
+	clientSecret, err := s.secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET")
+	if err != nil {
+		return nil, fmt.Errorf("reading GOOGLE_OAUTH2_CLIENT_SECRET: %w", err)
+	}
+	domain, err := s.secrets.Get("DOMAIN")
+	if err != nil {
+		return nil, fmt.Errorf("reading DOMAIN: %w", err)
+	}
+
+	return &oauth2.Config{
+		ClientID:     clientID.Value,
+		ClientSecret: clientSecret.Value,
+		RedirectURL:  strings.TrimSuffix(domain.Value, "/") + "/auth/web/callback/google",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
 			"openid",
 		},
 		Endpoint: google.Endpoint,
-	}
-	url := conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
-	return url, nil
+	}, nil
 }
 
-func (s *authService) googleWebCallback(ctx context.Context, code string) (*UserAuthResponse, error) {
-	conf := &oauth2.Config{
-		ClientID:     s.authRepository.secrets.Get("GOOGLE_OAUTH2_CLIENT_ID").Value,
-		ClientSecret: s.authRepository.secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET").Value,
-		RedirectURL:  os.Getenv("DOMAIN") + "/auth/callback/google",
-		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/userinfo.profile",
-			"openid",
-		},
-		Endpoint: google.Endpoint,
-	}
-
-	tok, err := conf.Exchange(ctx, code)
+func (s *Service) googleWebCallback(ctx context.Context, code string) (*UserAuthResponse, error) {
+	conf, err := s.oauthConfig()
 	if err != nil {
-		return nil, errors.New("Failed to exchange code for token")
+		return nil, err
 	}
 
-	client := conf.Client(ctx, tok)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	googleData, err := s.oauthRepository.ExchangeUserInfo(ctx, conf, code)
 	if err != nil {
-		return nil, errors.New("Failed to get user info")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.New("Failed to read user info response")
-	}
-
-	googleData := googleUserInfo{}
-	if err := json.Unmarshal(body, &googleData); err != nil {
-		return nil, errors.New("Failed to decode user info")
+		return nil, err
 	}
 
 	user, err := s.authRepository.FindUserByProviderAndSubject(ctx, "google", googleData.Sub)
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("finding user for google subject %s: %w", googleData.Sub, err)
+		}
 
 		user = &users.User{
 			UserWeb: users.UserWeb{
-				UserPost: users.UserPost{
-					Username: googleData.Name,
-				},
+				UserPost: users.UserPost{Username: googleData.Name},
 			},
 		}
-
-		if err := s.authRepository.CreateUser(ctx, user); err != nil {
-			return nil, fmt.Errorf("Failed to create user, %w", err)
-		}
-
-		identity := Identity{
+		identity := &Identity{
 			IdentityBase: IdentityBase{
 				Provider: "google",
 				Subject:  googleData.Sub,
 				Email:    googleData.Email,
 			},
-			User: *user,
 		}
 
-		if err := s.authRepository.CreateIdentity(ctx, &identity); err != nil {
-			return nil, fmt.Errorf("Failed to create identity, %w", err)
+		if err := s.authRepository.CreateUserWithIdentity(ctx, user, identity); err != nil {
+			return nil, fmt.Errorf("creating user for google subject %s: %w", googleData.Sub, err)
 		}
-
 	}
 
-	return s.userToUserAuthResponse(user)
+	return s.userToUserAuthResponse(ctx, user)
 }
 
-func (s *authService) userToUserAuthResponse(user *users.User) (*UserAuthResponse, error) {
-	if user == nil {
-		return nil, fmt.Errorf("authService.userToUserAuthResponse: user is nil")
+func (s *Service) userToUserAuthResponse(ctx context.Context, user *users.User) (*UserAuthResponse, error) {
+	jwt, err := s.tokenService.GenerateJWT(user)
+	if err != nil {
+		return nil, fmt.Errorf("generating jwt for user %s: %w", user.ID, err)
 	}
 
-	jwt, err := s.tokenService.tokenRepository.GenerateJWTForUser(user)
+	refreshToken, err := s.tokenService.GenerateRefreshToken(ctx, user)
 	if err != nil {
-		return nil, fmt.Errorf("authService.userToUserAuthResponse: %w", err)
-	}
-
-	refreshToken, err := s.tokenService.tokenRepository.GenerateRefreshTokenForUser(user)
-	if err != nil {
-		return nil, fmt.Errorf("authService.userToUserAuthResponse: %w", err)
+		return nil, fmt.Errorf("generating refresh token for user %s: %w", user.ID, err)
 	}
 
 	return &UserAuthResponse{
@@ -223,49 +204,130 @@ func (s *authService) userToUserAuthResponse(user *users.User) (*UserAuthRespons
 	}, nil
 }
 
-/**
-
-type keyCacheItem struct {
-	PubKey     string
-	expiration int64
+type TokenService struct {
+	repository  *Repository
+	secretStore *secrets.SecretStore
 }
 
-var keyCache = make(map[string]keyCacheItem)
-
-func getAuthKey(provider string, kid string) (string, error) {
-	cacheKey := provider + ":" + kid
-	if item, found := keyCache[cacheKey]; found {
-		if item.expiration > time.Now().Unix() {
-			return item.PubKey, nil
-		}
-		delete(keyCache, cacheKey) // Remove expired key
+func NewTokenService(repository *Repository, secretStore *secrets.SecretStore) *TokenService {
+	return &TokenService{
+		repository:  repository,
+		secretStore: secretStore,
 	}
-
-	var key keyCacheItem
-	if provider == "google" {
-
-	} else if provider == "apple" {
-
-	}
-
-	keyCache[cacheKey] = key
-	return key.PubKey, nil
-
-}
-*/
-
-// type TokenService interface {
-// 	// GenerateJWTForUser(*users.User) (string, error)
-// 	RefreshToken(string) (string, error)
-// 	userToUserAuthResponse(user *users.User) (UserAuthResponse, error)
-// }
-
-type tokenService struct {
-	tokenRepository *tokenRepository
 }
 
-func NewTokenService(tokenRepository *tokenRepository) *tokenService {
-	return &tokenService{
-		tokenRepository: tokenRepository,
+func (s *TokenService) GenerateJWT(user *users.User) (string, error) {
+	secretValue, err := s.secretStore.Get("JWT_SIGNING_SECRET")
+	if err != nil {
+		return "", fmt.Errorf("reading JWT_SIGNING_SECRET: %w", err)
 	}
+
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		Issuer:    jwtIssuer,
+		Audience:  jwt.ClaimStrings{jwtAudience},
+		Subject:   user.ID.String(),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(jwtTTL)),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secretValue.Value))
+}
+
+func (s *TokenService) GenerateRefreshToken(ctx context.Context, user *users.User) (string, error) {
+	rawToken, tokenID, hash, err := newRefreshTokenValues()
+	if err != nil {
+		return "", err
+	}
+
+	token := &RefreshToken{
+		RefreshTokenBase: RefreshTokenBase{
+			UserID:    user.ID,
+			Token:     hash,
+			ExpiresAt: time.Now().Add(refreshTokenTTL),
+		},
+	}
+	token.ID = tokenID
+	if err := s.repository.CreateRefreshToken(ctx, token); err != nil {
+		return "", err
+	}
+
+	return rawToken, nil
+}
+
+// RotateRefreshToken consumes a raw token of the form "<refresh-token-id>.<verifier>", validates
+// the verifier against the stored bcrypt hash, and issues a replacement token.
+func (s *TokenService) RotateRefreshToken(ctx context.Context, rawToken string) (*users.User, string, error) {
+	tokenID, verifier, err := parseRefreshToken(rawToken)
+	if err != nil {
+		return nil, "", ErrInvalidRefreshToken
+	}
+
+	newRawToken, newID, newHash, err := newRefreshTokenValues()
+	if err != nil {
+		return nil, "", err
+	}
+
+	newToken := &RefreshToken{
+		RefreshTokenBase: RefreshTokenBase{
+			Token:     newHash,
+			ExpiresAt: time.Now().Add(refreshTokenTTL),
+		},
+	}
+	newToken.ID = newID
+
+	userID, err := s.repository.RotateRefreshToken(ctx, tokenID, verifier, newToken)
+	if err != nil {
+		return nil, "", err
+	}
+
+	user, err := s.repository.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return user, newRawToken, nil
+}
+
+func newRefreshTokenValues() (rawToken string, tokenID uuid.UUID, hash string, err error) {
+	tokenID, err = uuid.NewV7()
+	if err != nil {
+		return "", uuid.Nil, "", fmt.Errorf("generating refresh token id: %w", err)
+	}
+
+	verifierBytes := make([]byte, 32)
+	if _, err := rand.Read(verifierBytes); err != nil {
+		return "", uuid.Nil, "", fmt.Errorf("generating refresh token bytes: %w", err)
+	}
+	verifier := hex.EncodeToString(verifierBytes)
+
+	hash, err = hashRefreshToken(verifier)
+	if err != nil {
+		return "", uuid.Nil, "", err
+	}
+
+	return tokenID.String() + "." + verifier, tokenID, hash, nil
+}
+
+func hashRefreshToken(verifier string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(verifier), refreshTokenBcryptCost)
+	if err != nil {
+		return "", ErrUnableToHashRefreshToken
+	}
+	return string(hash), nil
+}
+
+// parseRefreshToken splits a raw token into its lookup selector (row ID) and secret verifier.
+func parseRefreshToken(rawToken string) (uuid.UUID, string, error) {
+	idPart, verifier, found := strings.Cut(rawToken, ".")
+	if !found || idPart == "" || verifier == "" {
+		return uuid.Nil, "", ErrInvalidRefreshToken
+	}
+
+	id, err := uuid.FromString(idPart)
+	if err != nil {
+		return uuid.Nil, "", ErrInvalidRefreshToken
+	}
+	return id, verifier, nil
 }

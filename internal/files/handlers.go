@@ -2,12 +2,10 @@ package files
 
 import (
 	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/server"
 	"auto-myself-api/internal/users"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/gin-contrib/slog"
@@ -16,162 +14,115 @@ import (
 	"gorm.io/gorm"
 )
 
+// MaxUploadBytes caps a single upload request body at 10 MiB.
+const MaxUploadBytes = 10 << 20
+
 type FileHandler interface {
-	GetIDsForRecord(c *gin.Context)
-	GetByID(c *gin.Context)
-	CreateForRecordByID(c *gin.Context)
-	DeleteByID(c *gin.Context)
+	GetForRecord(*gin.Context)
+	CreateForRecord(*gin.Context)
+	DeleteByID(*gin.Context)
 }
 
 type Handler struct {
-	service Service
+	fileService *Service
 }
 
-func NewFileHandler(service Service) *Handler {
+func NewFileHandler(fileService *Service) *Handler {
 	return &Handler{
-		service: service,
+		fileService: fileService,
 	}
 }
 
-func (h *Handler) GetIDsForRecord(c *gin.Context) {
+func (h *Handler) GetForRecord(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
-	fileType := c.Param("record_type")
-	uuid := c.MustGet("uuid_param")
+	recordType := c.Param("record_type")
+	recordUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	ids, err := h.service.GetIDsForRecord(ctx, fileType, uuid)
-
-	switch err {
-	case helpers.ErrAccessDenied:
-		slog.Get(c).Warn("Access denied for user attempting to get IDs for record")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+	entries, err := h.fileService.GetForRecord(ctx, recordType, recordUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrUnsupportedRecordType):
+		slog.Get(c).WarnContext(ctx, "unsupported file record type", "record_type", recordType)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
 		return
-	case gorm.ErrRecordNotFound:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "record not found", "record_type", recordType, "record_id", recordUUID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Record not found"})
 		return
-	case nil:
-		// no error, continue
 	default:
-		slog.Get(c).Error("Database error while getting IDs for record: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		slog.Get(c).ErrorContext(ctx, "failed to list files", "record_type", recordType, "record_id", recordUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"file_ids": ids})
+	c.JSON(http.StatusOK, entries)
 }
 
-func CreateFileForTypeByID(c *gin.Context, a *server.App) {
-	fileType := c.Param("record_type")
-	uuid := c.MustGet("uuid_param").(uuid.UUID)
-	user := c.MustGet("user").(*users.User)
+func (h *Handler) CreateForRecord(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	recordType := c.Param("record_type")
+	recordUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	if fileType == "maintenance" {
-		var maintenance MaintenanceRecord
-		if err := a.Gorm.Where("id = ?", uuid).First(&maintenance).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				c.JSON(404, gin.H{"error": "Maintenance record not found"})
-			} else {
-				c.JSON(500, gin.H{"error": "Database error"})
-			}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxUploadBytes)
+	data, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			slog.Get(c).WarnContext(ctx, "file upload too large", "record_type", recordType, "record_id", recordUUID)
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "File too large"})
 			return
 		}
-
-		a.Gorm.Model(&maintenance).Association("Vehicle").Find(&maintenance.Vehicle)
-
-		if !maintenance.Vehicle.CanWrite(a, user) {
-			if !maintenance.Vehicle.CanRead(a, user) {
-				c.JSON(404, gin.H{"error": "Maintenance record not found"})
-			} else {
-				c.JSON(403, gin.H{"error": "Forbidden"})
-			}
-			return
-		}
-
-		data, err := c.GetRawData()
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid file data"})
-			return
-		}
-
-		hash := sha256.Sum256(data)
-
-		var file File
-		file.CreatedBy = user.ID
-		file.Sha256Hash = hex.EncodeToString(hash[:])
-		file.FileSize = int64(len(data))
-
-		if err := a.Gorm.Create(&file).Error; err != nil {
-			c.JSON(500, gin.H{"error": "Failed to create file record"})
-			return
-		}
-		file.StorageKey = fmt.Sprintf("maintenance_record/%s", file.ID.String())
-		if err := a.Gorm.Save(&file).Error; err != nil {
-			c.JSON(500, gin.H{"error": "Failed to create file record"})
-			return
-		}
-
-		var mrFile MaintenanceRecordFile
-		mrFile.MaintenanceRecordID = uuid
-		mrFile.FileID = file.ID
-		if err := a.Gorm.Create(&mrFile).Error; err != nil {
-			c.JSON(500, gin.H{"error": "Failed to create file record"})
-			return
-		}
-
-		if err := file.UploadFile(a, &data); err != nil {
-			c.JSON(500, gin.H{"error": "Failed to upload file"})
-			println("Failed to upload file: " + err.Error())
-			return
-		}
-
-		c.JSON(201, mrFile)
-		return
-	} else {
-		c.JSON(400, gin.H{"error": "Invalid file type"})
-		println("Invalid file type: " + fileType)
+		slog.Get(c).WarnContext(ctx, "failed to read upload body", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file data"})
 		return
 	}
+
+	var link MaintenanceRecordFile
+	err = h.fileService.CreateForRecord(ctx, recordType, recordUUID, data, &link)
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrUnsupportedRecordType):
+		slog.Get(c).WarnContext(ctx, "unsupported file record type", "record_type", recordType)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
+		return
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied uploading file", "record_type", recordType, "record_id", recordUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "record not found", "record_type", recordType, "record_id", recordUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Record not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to upload file", "record_type", recordType, "record_id", recordUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.Header("Location", "/v1/file/"+link.FileID.String())
+	c.JSON(http.StatusCreated, link)
 }
 
-func DeleteFileByID(c *gin.Context, a *server.App) {
-	uuid := c.MustGet("uuid_param").(uuid.UUID)
-	user := c.MustGet("user").(*users.User)
+func (h *Handler) DeleteByID(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	fileUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	var file File
-	if err := a.Gorm.Where("id = ?", uuid).First(&file).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(404, gin.H{"error": "File not found"})
-		} else {
-			c.JSON(500, gin.H{"error": "Database error"})
-		}
+	err := h.fileService.DeleteByID(ctx, fileUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied deleting file", "file_id", fileUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "file not found", "file_id", fileUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to delete file", "file_id", fileUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	var maintenanceRecordLink MaintenanceRecordFile
-	if err := a.Gorm.Where("file_id = ?", file.ID).First(&maintenanceRecordLink).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			c.JSON(500, gin.H{"error": "Database error"})
-			return
-		}
-	}
-	if !maintenanceRecordLink.ID.IsNil() { // Is maintenance record file
-		a.Gorm.Model(&maintenanceRecordLink).Association("MaintenanceRecord").Find(&maintenanceRecordLink.MaintenanceRecord)
-		a.Gorm.Model(&maintenanceRecordLink.MaintenanceRecord).Association("Vehicle").Find(&maintenanceRecordLink.MaintenanceRecord.Vehicle)
-
-		if !maintenanceRecordLink.MaintenanceRecord.Vehicle.CanWrite(a, user) {
-			if !maintenanceRecordLink.MaintenanceRecord.Vehicle.CanRead(a, user) {
-				c.JSON(404, gin.H{"error": "File not found"})
-			} else {
-				c.JSON(403, gin.H{"error": "Forbidden"})
-			}
-			return
-		}
-
-		if err := maintenanceRecordLink.DeleteWithFile(a); err != nil {
-			c.JSON(500, gin.H{"error": "Failed to delete file from storage"})
-			return
-		}
-
-		c.Status(204)
-		return
-	}
+	c.Status(http.StatusNoContent)
 }

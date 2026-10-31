@@ -2,7 +2,6 @@ package auth
 
 import (
 	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/users"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -17,9 +16,11 @@ type IdentityBase struct {
 }
 
 type Identity struct {
-	helpers.DatabaseMetadata
 	IdentityBase
-	User users.User `gorm:"foreignKey:UserID;references:ID;"`
+	ID        uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 func (Identity) TableName() string {
@@ -27,33 +28,29 @@ func (Identity) TableName() string {
 }
 
 func (i *Identity) BeforeCreate(tx *gorm.DB) (err error) {
-	if i.ID.IsNil() {
-		i.ID, err = uuid.NewV7()
-	}
-	return err
+	return helpers.BeforeCreateID(tx, i)
 }
 
 type RefreshTokenBase struct {
-	UserID    uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;"`
-	Token     string    `json:"token,omitempty" gorm:"type:text;"`
-	ExpiresAt time.Time `json:"expires_at,omitempty" gorm:"type:timestamp;"`
+	UserID    uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null"`
+	Token     string    `json:"token,omitempty" gorm:"type:text;not null"`
+	ExpiresAt time.Time `json:"expires_at,omitempty" gorm:"type:timestamp with time zone;not null"`
 }
 
 type RefreshToken struct {
-	helpers.DatabaseMetadata
 	RefreshTokenBase
-	User users.User `gorm:"foreignKey:UserID;references:ID;"`
+	ID        uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 func (RefreshToken) TableName() string {
 	return "refresh_tokens"
 }
 
-func (i *RefreshToken) BeforeCreate(tx *gorm.DB) (err error) {
-	if i.ID.IsNil() {
-		i.ID, err = uuid.NewV7()
-	}
-	return err
+func (r *RefreshToken) BeforeCreate(tx *gorm.DB) (err error) {
+	return helpers.BeforeCreateID(tx, r)
 }
 
 type googleUserInfo struct {
@@ -67,7 +64,7 @@ type googleUserInfo struct {
 }
 
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
 type DevelopmentLoginRequest struct {

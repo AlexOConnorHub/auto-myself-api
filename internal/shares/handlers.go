@@ -2,146 +2,146 @@ package shares
 
 import (
 	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/server"
 	"auto-myself-api/internal/users"
-	"auto-myself-api/internal/vehicles"
+	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
+	"gorm.io/gorm"
 )
 
-func GetAllShares(c *gin.Context, a *server.App) {
-	user := c.MustGet("user").(*users.User)
-
-	var shareIds []string
-	a.Gorm.Model(&user).Association("PendingVehicleSharesReceived").Find(&user.PendingVehicleSharesReceived)
-
-	for _, share := range user.PendingVehicleSharesReceived {
-		shareIds = append(shareIds, share.ID.String())
-	}
-
-	a.Gorm.Model(&user).Association("PendingVehicleSharesSent").Find(&user.PendingVehicleSharesSent)
-
-	for _, share := range user.PendingVehicleSharesSent {
-		shareIds = append(shareIds, share.ID.String())
-	}
-
-	c.JSON(http.StatusOK, shareIds)
+type ShareHandler interface {
+	GetAllShares(*gin.Context)
+	GetShareByID(*gin.Context)
+	CreateShare(*gin.Context)
+	AcceptShare(*gin.Context)
+	DeleteShareByID(*gin.Context)
 }
 
-func GetShareByID(c *gin.Context, a *server.App) {
-	user := c.MustGet("user").(*users.User)
+type Handler struct {
+	shareService *Service
+}
 
-	shareUUID := c.MustGet("uuid_param").(uuid.UUID)
+func NewShareHandler(shareService *Service) *Handler {
+	return &Handler{
+		shareService: shareService,
+	}
+}
 
-	var share vehicles.VehicleUserAccessPending
-	if err := a.Gorm.First(&share, "id = ?", shareUUID).Error; err != nil {
-		helpers.DatabaseFetchError(c, err, "id", shareUUID)
-		c.Abort()
+func (h *Handler) GetAllShares(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+
+	shareIDs, err := h.shareService.GetAllShares(ctx)
+	if err != nil {
+		slog.Get(c).ErrorContext(ctx, "failed to list shares", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	if share.UserID != user.ID && share.CreatedBy != user.ID {
-		c.AbortWithStatus(http.StatusNotFound)
+	c.JSON(http.StatusOK, shareIDs)
+}
+
+func (h *Handler) GetShareByID(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	shareUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
+
+	share, err := h.shareService.GetShareByID(ctx, shareUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "share not found", "share_id", shareUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Share not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to find share", "share_id", shareUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, share.VehicleUserAccessBase)
 }
 
-func CreateShare(c *gin.Context, a *server.App) {
-	user := c.MustGet("user").(*users.User)
+func (h *Handler) CreateShare(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
 
-	var share vehicles.VehicleUserAccessBase
-	if err := c.ShouldBindJSON(&share); err != nil {
-		slog.Get(c).Warn("Failed to bind JSON", "error", err)
-		c.AbortWithStatus(http.StatusBadRequest)
+	var share VehicleUserAccessPending
+	if err := c.ShouldBindJSON(&share.VehicleUserAccessBase); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid share body", "error", err)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	record := vehicles.VehicleUserAccessPending{
-		VehicleUserAccessBase: share,
-		CreatedBy:             user.ID,
-	}
-
-	if err := a.Gorm.Create(&record).Error; err != nil {
-		slog.Get(c).Warn("Failed to create record", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+	err := h.shareService.CreateShare(ctx, &share)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied creating share", "vehicle_id", share.VehicleID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, gorm.ErrForeignKeyViolated):
+		slog.Get(c).InfoContext(ctx, "vehicle or user not found while creating share", "vehicle_id", share.VehicleID, "user_id", share.UserID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle or user not found"})
+		return
+	case errors.Is(err, ErrShareAlreadyExists), errors.Is(err, gorm.ErrDuplicatedKey):
+		slog.Get(c).WarnContext(ctx, "share already exists", "vehicle_id", share.VehicleID, "user_id", share.UserID)
+		c.JSON(http.StatusConflict, gin.H{"error": "Share already exists"})
+		return
+	case errors.Is(err, ErrCannotShareWithSelf):
+		slog.Get(c).WarnContext(ctx, "cannot share with self", "user_id", share.UserID)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Cannot share a vehicle with yourself"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to create share", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.Header("Location", "/v1/share/"+record.ID.String())
+	c.Header("Location", "/v1/share/"+share.ID.String())
 	c.Status(http.StatusCreated)
 }
 
-func AcceptShare(c *gin.Context, a *server.App) {
-	user := c.MustGet("user").(*users.User)
-	var share vehicles.VehicleUserAccessPending
+func (h *Handler) AcceptShare(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	shareUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	err := a.Gorm.First(&share, "id = ?", c.MustGet("uuid_param").(uuid.UUID)).Error
-	if err != nil {
-		helpers.DatabaseFetchError(c, err, "id", c.MustGet("uuid_param").(uuid.UUID))
-		c.Abort()
+	access, err := h.shareService.AcceptShare(ctx, shareUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "creator may not accept their own share", "share_id", shareUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "share not found", "share_id", shareUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Share not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to accept share", "share_id", shareUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	if user.ID != share.UserID {
-		var status int
-		if user.ID == share.CreatedBy {
-			status = http.StatusForbidden
-		} else {
-			status = http.StatusNotFound
-		}
-		c.AbortWithStatus(status)
-		return
-	}
-
-	access := vehicles.VehicleUserAccess{
-		VehicleUserAccessBase: share.VehicleUserAccessBase,
-		CreatedBy:             share.UserID,
-	}
-
-	if err := a.Gorm.Create(&access).Error; err != nil {
-		slog.Get(c).Warn("Failed to create record", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-
-	if err := a.Gorm.Delete(&share).Error; err != nil {
-		slog.Get(c).Warn("Failed to delete record", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-
-	a.Gorm.Model(&access).Association("Vehicle").Find(&access.Vehicle)
-
-	c.Header("Location", "/v1/vehicle/"+access.Vehicle.ID.String())
+	c.Header("Location", "/v1/vehicle/"+access.VehicleID.String())
 	c.Status(http.StatusNoContent)
 }
 
-func DeleteShareByID(c *gin.Context, a *server.App) {
-	ctx := c.Request.Context()
-	user := c.MustGet("user").(*users.User)
+func (h *Handler) DeleteShareByID(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	shareUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	shareUUID := c.MustGet("uuid_param").(uuid.UUID)
-
-	var share vehicles.VehicleUserAccessPending
-	if err := a.Gorm.WithContext(ctx).First(&share, "id = ?", shareUUID).Error; err != nil {
-		helpers.DatabaseFetchError(c, err, "id", shareUUID)
-		c.Abort()
+	err := h.shareService.DeleteShareByID(ctx, shareUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "share not found", "share_id", shareUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Share not found"})
 		return
-	}
-
-	if user.ID != share.UserID && user.ID != share.CreatedBy {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
-	}
-
-	if err := a.Gorm.WithContext(ctx).Delete(&share).Error; err != nil {
-		slog.Get(c).Warn("Failed to delete record", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to delete share", "share_id", shareUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 

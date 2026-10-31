@@ -1,4 +1,5 @@
-#/bin/bash
+#!/bin/bash
+set -euo pipefail
 source .env
 
 ARGS=("$@")
@@ -6,10 +7,14 @@ if [ ${#ARGS[@]} -eq 0 ]; then
   ARGS=("up")
 fi
 
-docker run --rm \
+DB_URL="${POSTGRES_URL:-postgres:password@localhost:5432/appdb}"
+SEP="?"
+case "$DB_URL" in *\?*) SEP="&" ;; esac
+
+docker run --rm -i \
   -v ./migrations/seed:/migrations \
   --network host \
   migrate/migrate \
   -path=/migrations \
-  -database="postgres://${POSTGRES_URL:-postgres:password@localhost:5432/appdb\?sslmode=disable}&search_path=public&x-migrations-table=_seed_migrations" \
+  -database="postgres://${DB_URL}${SEP}sslmode=disable&search_path=public&x-migrations-table=_seed_migrations" \
   "${ARGS[@]}"

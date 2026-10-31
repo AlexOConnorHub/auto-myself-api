@@ -13,7 +13,8 @@ RUN CGO_ENABLED=0 GOOS=linux \
     go build \
         -trimpath \
         -ldflags="-s -w" \
-        -o /server
+        -o /server \
+        ./cmd/api
 
 FROM alpine:latest AS certificates
 RUN apk --no-cache add ca-certificates

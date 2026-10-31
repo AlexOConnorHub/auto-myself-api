@@ -1,7 +1,8 @@
 package middleware
 
 import (
-	"fmt"
+	"auto-myself-api/internal/helpers"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,24 +11,21 @@ import (
 
 func ParseUUIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userUUID := c.Param("uuid")
-		if userUUID != "" {
-			parsedUUID, err := uuid.FromString(userUUID)
+		param := c.Param("uuid")
+		if param != "" {
+			parsedUUID, err := uuid.FromString(param)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Malformed UUID"})
-				c.Abort()
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Malformed UUID"})
 				return
 			}
 
-			_, err = uuid.TimestampFromV7(parsedUUID)
-			if err != nil {
-				fmt.Printf("Error parsing timestamp from UUID %s: %v\n", parsedUUID, err)
-				c.JSON(http.StatusBadRequest, gin.H{"error": "UUID must be v7 (with valid timestamp)"})
-				c.Abort()
+			if _, err := uuid.TimestampFromV7(parsedUUID); err != nil {
+				slog.WarnContext(c.Request.Context(), "UUID parameter is not v7", "uuid", parsedUUID, "error", err)
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "UUID must be v7 (with valid timestamp)"})
 				return
 			}
 
-			c.Set("uuid_param", parsedUUID)
+			c.Set(helpers.UUIDParamKey, parsedUUID)
 		}
 		c.Next()
 	}

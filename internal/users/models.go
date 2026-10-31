@@ -33,8 +33,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	if u.Role == "" {
 		u.Role = RoleUser
 	}
-
-	return helpers.SetUUIDV7IfNil(&u.ID)
+	return helpers.BeforeCreateID(tx, u)
 }
 
 const (

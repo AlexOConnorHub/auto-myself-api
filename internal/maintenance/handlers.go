@@ -4,6 +4,7 @@ import (
 	"auto-myself-api/internal/helpers"
 	"auto-myself-api/internal/users"
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-contrib/slog"
@@ -32,50 +33,37 @@ func NewMaintenanceHandler(maintenanceService *Service) *Handler {
 
 func (h *Handler) FindIDs(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
-	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
+	vehicleUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
 	maintenanceUUIDs, err := h.maintenanceService.FindIDs(ctx, vehicleUUID)
-
-	switch err {
-	case nil:
-		// No error, continue
-	case helpers.ErrAccessDenied:
-		slog.Get(c).WarnContext(ctx, "Access denied", "error", err)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-		return
-	case gorm.ErrRecordNotFound:
-		slog.Get(c).WarnContext(ctx, "Vehicle not found", "error", err)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "vehicle not found", "vehicle_id", vehicleUUID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
 		return
 	default:
-		slog.Get(c).ErrorContext(ctx, "Unexpected error", "error", err)
+		slog.Get(c).ErrorContext(ctx, "failed to find maintenance record IDs", "vehicle_id", vehicleUUID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, maintenanceUUIDs)
-	return
-
 }
 
 func (h *Handler) FindByID(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
-	maintenanceUUID := c.MustGet("uuid_param").(uuid.UUID)
+	maintenanceUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
 	maintenanceRecord, err := h.maintenanceService.FindByID(ctx, maintenanceUUID)
-	switch err {
-	case nil:
-		// No error, continue
-	case helpers.ErrAccessDenied:
-		slog.Get(c).WarnContext(ctx, "Access denied", "error", err)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-		return
-	case gorm.ErrRecordNotFound:
-		slog.Get(c).WarnContext(ctx, "Maintenance record not found", "error", err)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "maintenance record not found", "maintenance_id", maintenanceUUID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance record not found"})
 		return
 	default:
-		slog.Get(c).ErrorContext(ctx, "Unexpected error", "error", err)
+		slog.Get(c).ErrorContext(ctx, "failed to find maintenance record", "maintenance_id", maintenanceUUID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -88,41 +76,59 @@ func (h *Handler) Create(c *gin.Context) {
 
 	var maintenanceRecord MaintenanceRecord
 	if err := c.ShouldBindJSON(&maintenanceRecord.MaintenanceRecordWeb.MaintenanceRecordPost); err != nil {
-		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+		slog.Get(c).WarnContext(ctx, "invalid maintenance record body", "error", err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	if err := h.maintenanceService.Create(ctx, &maintenanceRecord); err != nil {
-		slog.Get(c).ErrorContext(ctx, "Failed to create maintenance record", "error", err)
+	if suppliedID, exists := c.Get(helpers.UUIDParamKey); exists {
+		maintenanceRecord.ID = suppliedID.(uuid.UUID)
+	}
+
+	err := h.maintenanceService.Create(ctx, &maintenanceRecord)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied creating maintenance record", "vehicle_id", maintenanceRecord.VehicleID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "vehicle not found", "vehicle_id", maintenanceRecord.VehicleID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		return
+	case errors.Is(err, gorm.ErrDuplicatedKey):
+		slog.Get(c).WarnContext(ctx, "maintenance record already exists", "maintenance_id", maintenanceRecord.ID)
+		c.JSON(http.StatusConflict, gin.H{"error": "Maintenance record already exists"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to create maintenance record", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, maintenanceRecord.MaintenanceRecordWeb)
+	c.Header("Location", "/v1/maintenance/"+maintenanceRecord.ID.String())
+	c.Status(http.StatusCreated)
 }
 
 func (h *Handler) DeleteByID(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
-	maintenanceRecordUUID := c.MustGet("uuid_param").(uuid.UUID)
+	maintenanceRecordUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	if err := h.maintenanceService.DeleteByID(ctx, maintenanceRecordUUID); err != nil {
-		switch err {
-		case nil:
-			// No error, continue
-		case helpers.ErrAccessDenied:
-			slog.Get(c).WarnContext(ctx, "Access denied", "error", err)
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-			return
-		case gorm.ErrRecordNotFound:
-			slog.Get(c).WarnContext(ctx, "Maintenance record not found", "error", err)
-			c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance record not found"})
-			return
-		default:
-			slog.Get(c).ErrorContext(ctx, "Unexpected error", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-			return
-		}
+	err := h.maintenanceService.DeleteByID(ctx, maintenanceRecordUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied deleting maintenance record", "maintenance_id", maintenanceRecordUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "maintenance record not found", "maintenance_id", maintenanceRecordUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance record not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to delete maintenance record", "maintenance_id", maintenanceRecordUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
 	}
 
 	c.Status(http.StatusNoContent)
@@ -130,30 +136,36 @@ func (h *Handler) DeleteByID(c *gin.Context) {
 
 func (h *Handler) UpdateByID(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
-	maintenanceUUID := c.MustGet("uuid_param").(uuid.UUID)
+	maintenanceUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	var maintenanceRecord MaintenanceRecord
-	if err := c.ShouldBindJSON(&maintenanceRecord.MaintenanceRecordWeb.MaintenanceRecordPost); err != nil {
-		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+	var input MaintenanceRecordUpdatePost
+	if err := c.ShouldBindJSON(&input); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid maintenance record body", "error", err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	err := h.maintenanceService.UpdateByID(ctx, maintenanceUUID, &maintenanceRecord)
+	maintenanceRecord := MaintenanceRecord{
+		MaintenanceRecordWeb: MaintenanceRecordWeb{
+			MaintenanceRecordPost: MaintenanceRecordPost{
+				MaintenanceRecordFields: input.MaintenanceRecordFields,
+			},
+		},
+	}
 
-	switch err {
-	case nil:
-		// No error, continue
-	case helpers.ErrAccessDenied:
-		slog.Get(c).WarnContext(ctx, "Access denied", "error", err)
+	err := h.maintenanceService.UpdateByID(ctx, maintenanceUUID, &maintenanceRecord)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied updating maintenance record", "maintenance_id", maintenanceUUID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
-	case gorm.ErrRecordNotFound:
-		slog.Get(c).WarnContext(ctx, "Maintenance record not found", "error", err)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "maintenance record not found", "maintenance_id", maintenanceUUID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance record not found"})
 		return
 	default:
-		slog.Get(c).ErrorContext(ctx, "Unexpected error", "error", err)
+		slog.Get(c).ErrorContext(ctx, "failed to update maintenance record", "maintenance_id", maintenanceUUID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}

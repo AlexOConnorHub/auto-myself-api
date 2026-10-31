@@ -2,18 +2,25 @@ package shares
 
 import (
 	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/users"
+	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
+type VehicleUserAccessBase struct {
+	UserID      uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null" binding:"required"`
+	VehicleID   uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null" binding:"required"`
+	WriteAccess bool      `json:"write_access" gorm:"column:write_access;not null;default:false"`
+}
+
 type VehicleUserAccessPending struct {
-	helpers.DatabaseMetadata
 	VehicleUserAccessBase
-	CreatedBy     uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
-	CreatedByUser User      `gorm:"foreignKey:CreatedBy;references:ID;"`
-	Vehicle       Vehicle   `gorm:"foreignKey:VehicleID;references:ID;"`
+	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;not null"`
+	CreatedBy uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 func (VehicleUserAccessPending) TableName() string {
@@ -21,33 +28,22 @@ func (VehicleUserAccessPending) TableName() string {
 }
 
 func (s *VehicleUserAccessPending) BeforeCreate(tx *gorm.DB) (err error) {
-	if s.ID.IsNil() {
-		s.ID, err = uuid.NewV7()
-	}
-	return err
-}
-
-type VehicleUserAccessBase struct {
-	UserID      uuid.UUID `json:"user_id,omitempty" gorm:"type:uuid;not null"`
-	VehicleID   uuid.UUID `json:"vehicle_id,omitempty" gorm:"type:uuid;not null"`
-	WriteAccess bool      `json:"write_access" gorm:"field:write_access;default:false"`
+	return helpers.BeforeCreateID(tx, s)
 }
 
 type VehicleUserAccess struct {
-	helpers.DatabaseMetadata
 	VehicleUserAccessBase
-	CreatedBy     uuid.UUID  `json:"created_by" gorm:"type:uuid;not null"`
-	CreatedByUser users.User `gorm:"foreignKey:CreatedBy;references:ID;"`
-	Vehicle       Vehicle    `gorm:"foreignKey:VehicleID;references:ID;"`
+	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;not null"`
+	CreatedBy uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 func (VehicleUserAccess) TableName() string {
 	return "vehicle_user_access"
 }
 
-func (vua *VehicleUserAccess) BeforeCreate(tx *gorm.DB) (err error) {
-	if vua.ID.IsNil() {
-		vua.ID, err = uuid.NewV7()
-	}
-	return err
+func (v *VehicleUserAccess) BeforeCreate(tx *gorm.DB) (err error) {
+	return helpers.BeforeCreateID(tx, v)
 }

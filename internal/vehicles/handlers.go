@@ -4,11 +4,13 @@ import (
 	"auto-myself-api/internal/helpers"
 	"auto-myself-api/internal/users"
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
+	"gorm.io/gorm"
 )
 
 type VehicleHandler interface {
@@ -20,37 +22,42 @@ type VehicleHandler interface {
 }
 
 type Handler struct {
-	Service *Service
+	vehicleService *Service
 }
 
-func NewVehicleHandler(Service *Service) *Handler {
+func NewVehicleHandler(vehicleService *Service) *Handler {
 	return &Handler{
-		Service: Service,
+		vehicleService: vehicleService,
 	}
 }
 
 func (h *Handler) FindIDs(c *gin.Context) {
-	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.Value(helpers.UserCtxKey).(*users.User))
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
 
-	vehicleIDs, err := h.Service.FindIDs(ctx)
-
+	vehicleIDs, err := h.vehicleService.FindIDs(ctx)
 	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "Failed to find vehicle IDs", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		slog.Get(c).ErrorContext(ctx, "failed to find vehicle IDs", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"vehicle_ids": vehicleIDs})
+	c.JSON(http.StatusOK, vehicleIDs)
 }
 
 func (h *Handler) FindByID(c *gin.Context) {
-	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.Value(helpers.UserCtxKey).(*users.User))
-	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	vehicleUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	vehicle, err := h.Service.FindByID(ctx, vehicleUUID)
-	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "Failed to find vehicle by ID", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+	vehicle, err := h.vehicleService.FindByID(ctx, vehicleUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "vehicle not found", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to find vehicle", "vehicle_id", vehicleUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -58,22 +65,30 @@ func (h *Handler) FindByID(c *gin.Context) {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.Value(helpers.UserCtxKey).(*users.User))
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
 
-	var newVehiclePost VehiclePost
-	if err := c.ShouldBindJSON(&newVehiclePost); err != nil {
-		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+	var vehiclePost VehiclePost
+	if err := c.ShouldBindJSON(&vehiclePost); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid vehicle body", "error", err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	newVehicle := Vehicle{VehicleWeb: VehicleWeb{VehiclePost: newVehiclePost}}
+	newVehicle := Vehicle{VehicleWeb: VehicleWeb{VehiclePost: vehiclePost}}
+	if suppliedID, exists := c.Get(helpers.UUIDParamKey); exists {
+		newVehicle.ID = suppliedID.(uuid.UUID)
+	}
 
-	err := h.Service.Create(ctx, &newVehicle)
-
-	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "Failed to create vehicle", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+	err := h.vehicleService.Create(ctx, &newVehicle)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrDuplicatedKey):
+		slog.Get(c).WarnContext(ctx, "vehicle already exists", "vehicle_id", newVehicle.ID)
+		c.JSON(http.StatusConflict, gin.H{"error": "Vehicle already exists"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to create vehicle", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -82,13 +97,23 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) DeleteByID(c *gin.Context) {
-	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.Value(helpers.UserCtxKey).(*users.User))
-	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	vehicleUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	err := h.Service.DeleteByID(ctx, vehicleUUID)
-	if err != nil {
-		slog.Get(c).Warn("Failed to delete vehicle", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+	err := h.vehicleService.DeleteByID(ctx, vehicleUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied deleting vehicle", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "vehicle not found", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to delete vehicle", "vehicle_id", vehicleUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -96,23 +121,30 @@ func (h *Handler) DeleteByID(c *gin.Context) {
 }
 
 func (h *Handler) UpdateByID(c *gin.Context) {
-	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.Value(helpers.UserCtxKey).(*users.User))
-	vehicleUUID := c.MustGet("uuid_param").(uuid.UUID)
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	vehicleUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	var vehiclePost VehiclePost
-	if err := c.ShouldBindJSON(&vehiclePost); err != nil {
-		slog.Get(c).Warn("Failed to bind JSON", "error", err)
+	var vehicle Vehicle
+	if err := c.ShouldBindJSON(&vehicle.VehicleWeb.VehiclePost); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid vehicle body", "error", err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	vehicle := Vehicle{VehicleWeb: VehicleWeb{VehiclePost: vehiclePost}}
-
-	err := h.Service.UpdateByID(ctx, vehicleUUID, &vehicle)
-
-	if err != nil {
-		slog.Get(c).Warn("Failed to update vehicle", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+	err := h.vehicleService.UpdateByID(ctx, vehicleUUID, &vehicle)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied updating vehicle", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "vehicle not found", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to update vehicle", "vehicle_id", vehicleUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 

@@ -3,11 +3,13 @@ package users
 import (
 	"auto-myself-api/internal/helpers"
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
+	"gorm.io/gorm"
 )
 
 type UserHandler interface {
@@ -16,56 +18,55 @@ type UserHandler interface {
 	GetUserByID(*gin.Context)
 }
 
-type userHandler struct {
-	userService *userService
+type Handler struct {
+	userService *Service
 }
 
-func NewUserHandler(userService *userService) *userHandler {
-	return &userHandler{
+func NewUserHandler(userService *Service) *Handler {
+	return &Handler{
 		userService: userService,
 	}
 }
 
-func (h *userHandler) GetCurrentUser(c *gin.Context) {
+func (h *Handler) GetCurrentUser(c *gin.Context) {
 	var user = c.MustGet(helpers.UserCtxKey).(*User)
 
 	c.JSON(http.StatusOK, user.UserWeb)
 }
 
-func (h *userHandler) UpdateUser(c *gin.Context) {
+func (h *Handler) UpdateUser(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*User))
 
-	var input UserPost
-	if err := c.ShouldBindJSON(&input); err != nil {
-		slog.Get(c).WarnContext(ctx, "users.UpdateCurrentUser: Failed to bind JSON", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	var user User
+	if err := c.ShouldBindJSON(&user.UserWeb.UserPost); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid user update body", "error", err)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	if err := h.userService.UpdateUser(ctx, input); err != nil {
-		slog.Get(c).ErrorContext(ctx, "Failed to update user", "error", err)
+	if err := h.userService.UpdateUser(ctx, &user); err != nil {
+		slog.Get(c).ErrorContext(ctx, "failed to update user", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, ctx.Value(helpers.UserCtxKey).(*User).UserWeb)
+	c.JSON(http.StatusOK, user.UserWeb)
 }
 
-func (h *userHandler) GetUserByID(c *gin.Context) {
+func (h *Handler) GetUserByID(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*User))
-	userUUID := c.MustGet("uuid_param").(uuid.UUID)
+	userUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
 	requestedUser, err := h.userService.GetUserByID(ctx, userUUID)
-
-	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "userHandler.GetUserByID: Failed to get user by ID", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-
-	if requestedUser == nil {
-		slog.Get(c).InfoContext(ctx, "userHandler.GetUserByID: User not found for ID", "user_id", userUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "user not found", "user_id", userUUID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to find user", "user_id", userUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 

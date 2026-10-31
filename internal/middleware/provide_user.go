@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"auto-myself-api/internal/database"
+	"auto-myself-api/internal/helpers"
 	"auto-myself-api/internal/secrets"
 	"auto-myself-api/internal/users"
 	"errors"
@@ -9,15 +9,11 @@ import (
 	"net/http"
 	"strings"
 
-	_ "github.com/joho/godotenv/autoload"
-	"gorm.io/gorm"
-
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid/v5"
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 )
-
-var secret []byte
 
 func getBearerFromHeader(header string) string {
 	const prefix = "Bearer "
@@ -28,16 +24,25 @@ func getBearerFromHeader(header string) string {
 	return strings.TrimSpace(header[len(prefix):])
 }
 
-func AuthMiddleware(secrets *secrets.SecretStore, database *database.Database) gin.HandlerFunc {
+func AuthMiddleware(secretStore *secrets.SecretStore, userRepository *users.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
-		value := secrets.Get("JWT_SIGNING_SECRET")
-		secret = []byte(value.Value)
+		secretValue, err := secretStore.Get("JWT_SIGNING_SECRET")
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to read JWT signing secret", "error", err)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
+			return
+		}
+
 		tokenString := getBearerFromHeader(c.GetHeader("Authorization"))
+		if tokenString == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
+			return
+		}
 
 		claims := &jwt.RegisteredClaims{}
-
+		secret := []byte(secretValue.Value)
 		token, err := jwt.ParseWithClaims(
 			tokenString,
 			claims,
@@ -45,42 +50,38 @@ func AuthMiddleware(secrets *secrets.SecretStore, database *database.Database) g
 				return secret, nil
 			},
 			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-			jwt.WithAudience("auto-myself-auth"),
+			jwt.WithAudience("auto-myself-api"),
 			jwt.WithIssuer("auto-myself-auth"),
 			jwt.WithIssuedAt(),
 			jwt.WithExpirationRequired(),
 		)
+		if err != nil || !token.Valid {
+			slog.WarnContext(ctx, "invalid JWT", "error", err)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
+			return
+		}
+
+		subject, err := uuid.FromString(claims.Subject)
 		if err != nil {
-			slog.Error("Failed to parse JWT token: ", err)
+			slog.WarnContext(ctx, "JWT subject is not a UUID", "error", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
 			return
 		}
 
-		if !token.Valid {
-			slog.Error("JWT token is not valid")
+		user, err := userRepository.FindByID(ctx, subject)
+		switch {
+		case err == nil:
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			slog.WarnContext(ctx, "JWT user not found", "user_id", subject)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
 			return
-		}
-
-		parsedUUID, err := uuid.FromString(claims.Subject)
-		if err != nil {
-			slog.Error("Failed to parse UUID from JWT subject: ", err)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
-			return
-		}
-
-		user, err := gorm.G[users.User](database.GetGorm()).Where("id = ?", parsedUUID).First(ctx)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Error("User not found for UUID: ", parsedUUID)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid request"})
-			return
-		} else if err != nil {
-			slog.Error("Failed to retrieve user from database: ", err)
+		default:
+			slog.ErrorContext(ctx, "failed to load user for JWT", "user_id", subject, "error", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
-		c.Set("user", &user)
+		c.Set(helpers.UserCtxKey, user)
 		c.Next()
 	}
 }

@@ -14,7 +14,7 @@ http:
     type: json
     data: |-
       {
-        "reported_table": "Your Mom",
+        "reported_topic": "Your Mom",
         "reported_id": "7c00bc79-2ae6-450a-8b60-b121019890ae",
         "reason": "418"
       }

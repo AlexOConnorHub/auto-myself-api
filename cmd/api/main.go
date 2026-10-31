@@ -1,48 +1,52 @@
-package api
+package main
 
 import (
+	"auto-myself-api/internal/server"
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	r := gin.New()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	ctx := context.Background()
+	engine := server.NewEngine()
 
-	Setup(ctx, r)
+	shutdownApp, err := Setup(ctx, engine)
+	if err != nil {
+		log.Fatalf("setup failed: %s", err)
+	}
+	defer shutdownApp()
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: r.Handler(),
+		Handler: engine.Handler(),
 	}
+
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("listen: %s", err)
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-ctx.Done()
 	log.Println("Shutdown Server ...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Println("Server Shutdown:", err)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server Shutdown: %s", err)
 	}
 	log.Println("Server exiting")
-
 }

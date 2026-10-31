@@ -1,12 +1,7 @@
-package maintenance
+package maintenance_test
 
 import (
-	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/models"
-	"auto-myself-api/internal/server"
-	"bytes"
-	"encoding/json"
-	"fmt"
+	"auto-myself-api/internal/testutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -15,539 +10,386 @@ import (
 	"github.com/gofrs/uuid/v5"
 )
 
-var AllMaintenances = [][]interface{}{
-	{"01978640-1148-74f8-be64-59f2af568e59", 0, 15000, "2023-01-15", "Oil change", "Oil Change", 5000, "miles", "019785fe-4eb4-766e-9c45-bec7780972a2", "$1.32"},
-	{"01978640-1148-74f8-be64-5e6b15475861", 0, 20000, "2023-06-20", "Tire rotation", "Tire Rotation", 10000, "miles", "019785fe-4eb4-766e-9c45-bec7780972a2", "$1.32"},
-	{"01978640-1148-74f8-be64-600b58c80190", 1, 5000, "2023-02-10", "Brake inspection", "Inspection", 10000, "miles", "019785fe-4eb4-766e-9c45-bec7780972a2", "$1.32"},
-	{"01978640-1148-74f8-be64-673c2bc659d3", 1, 12000, "2023-07-05", "Battery check", "Maintenance Check", 20000, "miles", "019785fe-4eb4-766e-9c45-bec7780972a2", "$1.32"},
-	{"01978640-1148-74f8-be64-6b2a85c627a7", 1, 8000, "2023-03-12", "Fluid top-up", "Maintenance Check", 5000, "miles", "019785fe-4eb4-766e-9c45-c1f83e7c1f1f", "$1.32"},
-	{"01978640-1148-74f8-be64-6ce4acd8abcd", 1, 16000, "2023-08-18", "Tire replacement", "Tire Replacement", 20000, "miles", "019785fe-4eb4-766e-9c45-c1f83e7c1f1f", "$1.32"},
-	{"01978640-1148-74f8-be64-70821e946a20", 1, 3000, "2023-04-05", "Oil change", "Oil Change", 5000, "miles", "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3", "$1.32"},
-	{"01978640-1148-74f8-be64-74b319513577", 1, 7000, "2023-09-10", "Brake pad replacement", "Brake Replacement", 10000, "miles", "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3", "$1.32"},
-	{"01978640-1148-74f8-be64-7b8ece4dc40f", 1, 1000, "2023-05-15", "Inspection check", "Inspection Check", 5000, "miles", "019785fe-4eb4-766e-9c45-fc6ed4a7407b", "$1.32"},
-	{"01978640-1148-74f8-be64-7ea0e41d68d5", 1, 4000, "2023-10-20", "Tire rotation and balance", "Tire Rotation and Balance", 10000, "miles", "019785fe-4eb4-766e-9c45-fc6ed4a7407b", "$1.32"},
-	{"01978640-1148-74f8-be64-bc7c09adc4c1", 2, 3000, "2023-04-05", "Oil change", "Oil Change", 5000, "miles", "019785fe-4eb4-766e-9c45-c8578456b4df", "$1.32"},
-	{"01978640-1148-74f8-be64-ac02bbbf11cf", 2, 7000, "2023-09-10", "Brake pad replacement", "Brake Replacement", 10000, "miles", "019785fe-4eb4-766e-9c45-c8578456b4df", "$1.32"},
-	{"01978640-1148-74f8-be64-b446e827f938", 3, 3000, "2023-04-05", "Oil change", "Oil Change", 5000, "miles", "019785fe-4eb4-766e-9c45-f592a1187d0c", "$1.32"},
-	{"01978640-1148-74f8-be64-ba806fa103c7", 3, 7000, "2023-09-10", "Brake pad replacement", "Brake Replacement", 10000, "miles", "019785fe-4eb4-766e-9c45-f592a1187d0c", "$1.32"},
-	{"01978640-1149-7118-bada-9f77b4fa870a", 3, 2000, "2023-03-01", "Oil change", "Oil Change", 5000, "miles", "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3", "$1.32"},
-	{"01978640-1149-7118-bada-a16e466c1064", 3, 4000, "2023-08-15", "Tire rotation and balance", "Tire Rotation and Balance", 10000, "miles", "019785fe-4eb4-766e-9c45-f9cd4ee5c0b3", "$1.32"},
-	{"01978640-1149-7118-bada-a7ce46886414", 4, 5000, "2023-02-10", "Brake inspection", "Inspection", 10000, "miles", "019785fe-4eb4-766e-9c45-fc6ed4a7407b", "$1.32"},
-	{"01978640-1149-7118-bada-aa596985d112", 4, 12000, "2023-07-05", "Battery check", "Maintenance Check", 20000, "miles", "019785fe-4eb4-766e-9c45-fc6ed4a7407b", "$1.32"},
+type maintenanceResponse struct {
+	ID           uuid.UUID `json:"ID"`
+	CreatedBy    uuid.UUID `json:"created_by"`
+	VehicleID    uuid.UUID `json:"vehicle_id"`
+	Timestamp    time.Time `json:"timestamp"`
+	Odometer     int       `json:"odometer"`
+	Notes        string    `json:"notes"`
+	Type         string    `json:"type"`
+	Interval     int       `json:"interval"`
+	IntervalType string    `json:"interval_type"`
+	Cost         string    `json:"cost"`
 }
 
-var MaintenanceFields = map[string]int{
-	"uuid":         0,
-	"vehicleIndex": 1,
-	"odometer":     2,
-	"timestamp":    3,
-	"notes":        4,
-	"type":         5,
-	"interval":     6,
-	"intervalType": 7,
-	"vehicleID":    8,
-	"cost":         9,
-}
-
-func validateMaintenanceResponse(marshaledResponse models.MaintenanceRecordBase, expected models.MaintenanceRecordBase) string {
-	if marshaledResponse.VehicleID != expected.VehicleID {
-		return fmt.Sprintf("Expected vehicleID to be %s, got %s", expected.VehicleID, marshaledResponse.VehicleID)
-	}
-	if marshaledResponse.Timestamp.Format("2006-01-02") != expected.Timestamp.Format("2006-01-02") {
-		return fmt.Sprintf("Expected timestamp to be %s, got %s", expected.Timestamp, marshaledResponse.Timestamp)
-	}
-	if marshaledResponse.Odometer != expected.Odometer {
-		return fmt.Sprintf("Expected odometer to be %d, got %d", expected.Odometer, marshaledResponse.Odometer)
-	}
-	if marshaledResponse.Notes != expected.Notes {
-		return fmt.Sprintf("Expected notes to be %s, got %s", expected.Notes, marshaledResponse.Notes)
-	}
-	if marshaledResponse.Type != expected.Type {
-		return fmt.Sprintf("Expected type to be %s, got %s", expected.Type, marshaledResponse.Type)
-	}
-	if marshaledResponse.Interval != expected.Interval {
-		return fmt.Sprintf("Expected interval to be %d, got %d", expected.Interval, marshaledResponse.Interval)
-	}
-	if marshaledResponse.IntervalType != expected.IntervalType {
-		return fmt.Sprintf("Expected intervalType to be %s, got %s", expected.IntervalType, marshaledResponse.IntervalType)
-	}
-	if marshaledResponse.Cost != expected.Cost {
-		return fmt.Sprintf("Expected cost to be %s, got %s", expected.Cost, marshaledResponse.Cost)
-	}
-	return ""
-}
-
-func loadMaintenanceRecord(index int) models.MaintenanceRecordBase {
-	maintenance := AllMaintenances[index]
-	vehicleID, err := uuid.FromString(AllVehicles[maintenance[1].(int)][0].(string))
+func expectedMaintenance(fixture testutil.MaintenanceFixture) maintenanceResponse {
+	timestamp, err := time.Parse("2006-01-02", fixture.Timestamp)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to parse vehicle ID: %v (index %d)", err, index))
+		panic("invalid maintenance fixture timestamp " + fixture.Timestamp + ": " + err.Error())
 	}
 
-	timestampStr := maintenance[3].(string)
-	timestamp, err := time.Parse("2006-01-02", timestampStr)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to parse timestamp: %v", err))
-	}
-
-	return models.MaintenanceRecordBase{
-		VehicleID:    vehicleID,
+	return maintenanceResponse{
+		ID:           fixture.ID,
+		CreatedBy:    fixture.CreatedBy,
+		VehicleID:    fixture.VehicleID,
 		Timestamp:    timestamp,
-		Odometer:     maintenance[2].(int),
-		Notes:        maintenance[4].(string),
-		Type:         maintenance[5].(string),
-		Interval:     maintenance[6].(int),
-		IntervalType: maintenance[7].(string),
-		Cost:         maintenance[9].(string),
+		Odometer:     fixture.Odometer,
+		Notes:        fixture.Notes,
+		Type:         fixture.Type,
+		Interval:     fixture.Interval,
+		IntervalType: fixture.IntervalType,
+		Cost:         fixture.Cost,
 	}
+}
+
+func assertMaintenance(t *testing.T, got, want maintenanceResponse) {
+	t.Helper()
+	if got.ID != want.ID {
+		t.Errorf("expected ID %s, got %s", want.ID, got.ID)
+	}
+	if got.VehicleID != want.VehicleID {
+		t.Errorf("expected vehicle_id %s, got %s", want.VehicleID, got.VehicleID)
+	}
+	if want.CreatedBy != uuid.Nil && got.CreatedBy != want.CreatedBy {
+		t.Errorf("expected created_by %s, got %s", want.CreatedBy, got.CreatedBy)
+	}
+	if got.Timestamp.Format("2006-01-02") != want.Timestamp.Format("2006-01-02") {
+		t.Errorf("expected timestamp %s, got %s", want.Timestamp.Format("2006-01-02"), got.Timestamp.Format("2006-01-02"))
+	}
+	if got.Odometer != want.Odometer {
+		t.Errorf("expected odometer %d, got %d", want.Odometer, got.Odometer)
+	}
+	if got.Notes != want.Notes {
+		t.Errorf("expected notes %q, got %q", want.Notes, got.Notes)
+	}
+	if got.Type != want.Type {
+		t.Errorf("expected type %q, got %q", want.Type, got.Type)
+	}
+	if got.Interval != want.Interval {
+		t.Errorf("expected interval %d, got %d", want.Interval, got.Interval)
+	}
+	if got.IntervalType != want.IntervalType {
+		t.Errorf("expected interval_type %q, got %q", want.IntervalType, got.IntervalType)
+	}
+	if got.Cost != want.Cost {
+		t.Errorf("expected cost %q, got %q", want.Cost, got.Cost)
+	}
+}
+
+func vehicleOwner(vehicleID uuid.UUID) uuid.UUID {
+	for _, vehicle := range testutil.Vehicles {
+		if vehicle.ID == vehicleID {
+			return vehicle.OwnerID
+		}
+	}
+	panic("unknown vehicle " + vehicleID.String())
+}
+
+func vehicleIndex(vehicleID uuid.UUID) int {
+	for i, vehicle := range testutil.Vehicles {
+		if vehicle.ID == vehicleID {
+			return i
+		}
+	}
+	panic("unknown vehicle " + vehicleID.String())
 }
 
 func TestMaintenancesVerifyAllExist(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	for index, maintenanceRecord := range AllMaintenances {
-		expected := loadMaintenanceRecord(index)
-		vehicleOwnerUUID := AllVehicles[maintenanceRecord[1].(int)][9].(string)
-		w := helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/"+maintenanceRecord[0].(string), vehicleOwnerUUID, nil)
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-			continue
-		}
-		var response models.MaintenanceRecordBase
-		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-			t.Errorf("Failed to unmarshal response: %v", err)
-			continue
-		}
-		if errMsg := validateMaintenanceResponse(response, expected); errMsg != "" {
-			t.Error(errMsg)
-			continue
-		}
+	for _, fixture := range testutil.Maintenances {
+		w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/maintenance/"+fixture.ID.String(), vehicleOwner(fixture.VehicleID), nil)
+		testutil.RequireStatus(t, w, http.StatusOK)
+
+		var response maintenanceResponse
+		testutil.DecodeJSON(t, w, &response)
+		assertMaintenance(t, response, expectedMaintenance(fixture))
 	}
 }
 
 func TestMaintenanceList(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	maintenanceCountHash := make(map[int]int)
-	for _, maintenanceRow := range AllMaintenances {
-		vehicleID := maintenanceRow[1].(int)
-		maintenanceCountHash[vehicleID]++
+	counts := make(map[uuid.UUID]int)
+	for _, fixture := range testutil.Maintenances {
+		counts[fixture.VehicleID]++
 	}
 
-	for userIndex, userAccess := range VehicleAccessMatrix {
-		for vehicleIndex, vehicleRow := range AllVehicles {
-			if userAccess[vehicleIndex] < READ_ONLY {
+	for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+		user := testutil.Users[userIndex]
+		for vi, vehicle := range testutil.Vehicles {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+vehicle.ID.String()+"/maintenance", user.ID, nil)
+
+			if accessRow[vi] < testutil.READ_ONLY {
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s listing maintenance for %s: expected 404, got %d", user.Username, vehicle.Nickname, w.Code)
+				}
 				continue
 			}
-			authUUID := AllUsers[userIndex][0]
-			vehicleID := vehicleRow[0].(string)
 
-			w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicleID+"/maintenance", authUUID, nil)
-			if w.Code != http.StatusOK {
-				t.Errorf("Expected status code %d, got %d for user %s", http.StatusOK, w.Code, AllUsers[userIndex][1])
-				continue
-			}
-
-			var ids []string
-			if err := json.Unmarshal(w.Body.Bytes(), &ids); err != nil {
-				t.Errorf("Failed to unmarshal response: %v", err)
-			}
-
-			if len(ids) != maintenanceCountHash[vehicleIndex] {
-				t.Errorf("Expected %d maintenance records, got %d for user %s", maintenanceCountHash[vehicleIndex], len(ids), AllUsers[userIndex][1])
+			testutil.RequireStatus(t, w, http.StatusOK)
+			var ids []uuid.UUID
+			testutil.DecodeJSON(t, w, &ids)
+			if len(ids) != counts[vehicle.ID] {
+				t.Errorf("%s listing maintenance for %s: expected %d, got %d", user.Username, vehicle.Nickname, counts[vehicle.ID], len(ids))
 			}
 		}
 	}
 }
 
 func TestMaintenancePost(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	vehicleUUID, err := uuid.FromString(AllVehicles[0][0].(string))
-	if err != nil {
-		t.Fatalf("Failed to parse vehicle UUID: %v", err)
+	body := map[string]any{
+		"vehicle_id":    testutil.Vehicle1ID,
+		"timestamp":     time.Now().Format(time.RFC3339),
+		"odometer":      10000,
+		"notes":         "TEST Initial maintenance",
+		"type":          "TEST Oil Change",
+		"interval":      5000,
+		"interval_type": "miles",
+		"cost":          "100.00",
 	}
 
-	newMaintenance := models.MaintenanceRecordBase{
-		VehicleID:    vehicleUUID,
-		Timestamp:    time.Now(),
-		Odometer:     10000,
-		Notes:        "TEST Initial maintenance",
-		Type:         "TEST Oil Change",
-		Interval:     5000,
-		IntervalType: "miles",
-		Cost:         "100.00",
-	}
-
-	bodyBytes, err := json.Marshal(newMaintenance)
-	if err != nil {
-		t.Fatalf("Failed to marshal modified maintenance record: %v", err)
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	w := helpers.TestRequestAsUser(r, "POST", "/v1/maintenance", AllVehicles[0][9].(string), bodyReader)
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
-	}
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", testutil.User1ID, testutil.JSONBody(t, body))
+	testutil.RequireStatus(t, w, http.StatusCreated)
 
 	location := w.Header().Get("Location")
 	if location == "" {
-		t.Error("Expected Location header to be set, but it was empty")
+		t.Fatal("expected Location header")
 	}
 
-	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-	}
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, location, testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
 
-	var response models.MaintenanceRecordBase
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
+	var response maintenanceResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.VehicleID != testutil.Vehicle1ID || response.Notes != "TEST Initial maintenance" || response.Odometer != 10000 {
+		t.Errorf("unexpected created maintenance record: %+v", response)
 	}
-
-	if errMsg := validateMaintenanceResponse(response, newMaintenance); errMsg != "" {
-		t.Error(errMsg)
+	if response.CreatedBy != testutil.User1ID {
+		t.Errorf("expected created_by %s, got %s", testutil.User1ID, response.CreatedBy)
 	}
 }
 
 func TestMaintenancePostWithUUID(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	vehicleUUID, err := uuid.FromString(AllVehicles[0][0].(string))
-	if err != nil {
-		t.Fatalf("Failed to parse vehicle UUID: %v", err)
+	supplied := "019d4374-c861-795b-8db5-5cbecdd1378e"
+	body := map[string]any{
+		"vehicle_id": testutil.Vehicle1ID,
+		"timestamp":  time.Now().Format(time.RFC3339),
+		"odometer":   10000,
+		"notes":      "TEST maintenance with supplied ID",
 	}
 
-	uuid := "019d4374-c861-795b-8db5-5cbecdd1378e"
-
-	newMaintenance := models.MaintenanceRecordBase{
-		VehicleID:    vehicleUUID,
-		Timestamp:    time.Now(),
-		Odometer:     10000,
-		Notes:        "TEST Initial maintenance",
-		Type:         "TEST Oil Change",
-		Interval:     5000,
-		IntervalType: "miles",
-		Cost:         "100.00",
-	}
-
-	bodyBytes, err := json.Marshal(newMaintenance)
-	if err != nil {
-		t.Fatalf("Failed to marshal modified maintenance record: %v", err)
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	w := helpers.TestRequestAsUser(r, "POST", "/v1/maintenance/"+uuid, AllVehicles[0][9].(string), bodyReader)
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
-	}
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance/"+supplied, testutil.User1ID, testutil.JSONBody(t, body))
+	testutil.RequireStatus(t, w, http.StatusCreated)
 
 	location := w.Header().Get("Location")
-	if location == "" {
-		t.Error("Expected Location header to be set, but it was empty")
+	if !strings.HasSuffix(location, "/"+supplied) {
+		t.Errorf("expected Location to end with %s, got %s", supplied, location)
 	}
 
-	pathParts := strings.Split(location, "/")
-	if pathParts[len(pathParts)-1] != uuid {
-		t.Errorf("Expected maintenance record ID to be %s, got %s", uuid, pathParts[len(pathParts)-1])
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, location, testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+}
+
+func TestMaintenanceCreatePermissions(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	body := func(vehicleID uuid.UUID) map[string]any {
+		return map[string]any{"vehicle_id": vehicleID, "notes": "permission test"}
 	}
 
-	w = helpers.TestRequestAsUser(r, "GET", location, AllVehicles[0][9].(string), nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	tests := []struct {
+		name      string
+		user      uuid.UUID
+		vehicleID uuid.UUID
+		want      int
+	}{
+		{"owner", testutil.User1ID, testutil.Vehicle1ID, http.StatusCreated},
+		{"write recipient", testutil.User2ID, testutil.Vehicle2ID, http.StatusCreated},
+		{"read-only recipient", testutil.User3ID, testutil.Vehicle2ID, http.StatusForbidden},
+		{"pending recipient", testutil.User4ID, testutil.Vehicle4ID, http.StatusNotFound},
+		{"no access", testutil.User5ID, testutil.Vehicle1ID, http.StatusNotFound},
 	}
 
-	var response models.MaintenanceRecordBase
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
-	}
-
-	if errMsg := validateMaintenanceResponse(response, newMaintenance); errMsg != "" {
-		t.Error(errMsg)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", test.user, testutil.JSONBody(t, body(test.vehicleID)))
+			testutil.RequireStatus(t, w, test.want)
+		})
 	}
 }
 
+func TestMaintenancePostRejectsMissingVehicle(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"notes": "no vehicle"}))
+	testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+}
+
 func TestMaintenancePatch(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	expected := loadMaintenanceRecord(0)
-	expected.Notes += " MODIFIED"
-	modified := models.MaintenanceRecordBase{
-		Notes: expected.Notes,
+	fixture := testutil.Maintenances[0]
+	newNotes := fixture.Notes + " MODIFIED"
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), vehicleOwner(fixture.VehicleID),
+		testutil.JSONBody(t, map[string]any{"notes": newNotes}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response maintenanceResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.Notes != newNotes {
+		t.Errorf("expected notes %q, got %q", newNotes, response.Notes)
 	}
-
-	bodyBytes, err := json.Marshal(modified)
-	if err != nil {
-		t.Fatalf("Failed to marshal modified maintenance record: %v", err)
+	if response.VehicleID != fixture.VehicleID {
+		t.Errorf("expected vehicle_id %s, got %s", fixture.VehicleID, response.VehicleID)
 	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/maintenance/"+AllMaintenances[0][0].(string), AllVehicles[AllMaintenances[0][1].(int)][9].(string), bodyReader)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	if response.Odometer != fixture.Odometer || response.Cost != fixture.Cost {
+		t.Errorf("PATCH should not clear untouched fields: %+v", response)
 	}
+}
 
-	var response models.MaintenanceRecordBase
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
-	}
+func TestMaintenancePatchCannotMoveVehicle(t *testing.T) {
+	env := testutil.SetupTest(t)
 
-	if errMsg := validateMaintenanceResponse(response, expected); errMsg != "" {
-		t.Error(errMsg)
+	fixture := testutil.Maintenances[0]
+	otherVehicle := testutil.Vehicle2ID
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), vehicleOwner(fixture.VehicleID),
+		testutil.JSONBody(t, map[string]any{"vehicle_id": otherVehicle, "notes": "attempted move"}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response maintenanceResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.VehicleID != fixture.VehicleID {
+		t.Errorf("maintenance record moved to %s; expected to stay on %s", response.VehicleID, fixture.VehicleID)
 	}
 }
 
 func TestMaintenanceDelete(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	maintenanceUUID := AllMaintenances[0][0].(string)
-	w := helpers.TestRequestAsUser(r, "DELETE", "/v1/maintenance/"+maintenanceUUID, AllVehicles[AllMaintenances[0][1].(int)][9].(string), nil)
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
-	}
+	fixture := testutil.Maintenances[0]
+	owner := vehicleOwner(fixture.VehicleID)
 
-	w = helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/"+maintenanceUUID, AllVehicles[AllMaintenances[0][1].(int)][9].(string), nil)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Expected status code %d after deletion, got %d", http.StatusNotFound, w.Code)
-	}
+	w := testutil.RequestAsUser(t, env.Router, http.MethodDelete, "/v1/maintenance/"+fixture.ID.String(), owner, nil)
+	testutil.RequireStatus(t, w, http.StatusNoContent)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/maintenance/"+fixture.ID.String(), owner, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
 }
 
 func TestMaintenanceReadPermissions(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var errors []string
+	for _, fixture := range testutil.Maintenances {
+		vi := vehicleIndex(fixture.VehicleID)
+		for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+			user := testutil.Users[userIndex]
 
-	for maintenanceRowIndex, maintenanceRow := range AllMaintenances {
-		maintenance := loadMaintenanceRecord(maintenanceRowIndex)
-		for userIndex, userRow := range AllUsers {
-			authUUID := userRow[0]
-			canRead := VehicleAccessMatrix[userIndex][maintenanceRow[1].(int)] >= READ_ONLY
+			w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/maintenance/"+fixture.ID.String(), user.ID, nil)
 
-			w := helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/"+maintenanceRow[0].(string), authUUID, nil)
-			if w.Code == http.StatusOK {
-				if !canRead {
-					errors = append(errors, fmt.Sprintf("User %s should not have read access to maintenance %s but got status %d", authUUID, maintenanceRow[0], w.Code))
-					continue
+			if accessRow[vi] < testutil.READ_ONLY {
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s reading maintenance %s: expected 404, got %d", user.Username, fixture.ID, w.Code)
 				}
-				var response models.MaintenanceRecordBase
-				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-					errors = append(errors, fmt.Sprintf("Failed to unmarshal response for user %s: %v", authUUID, err))
-					continue
-				}
-				if errMsg := validateMaintenanceResponse(response, maintenance); errMsg != "" {
-					errors = append(errors, fmt.Sprintf("Validation error for user %s on maintenance %s: %s", authUUID, maintenanceRow[0], errMsg))
-				}
-			} else if w.Code == http.StatusNotFound {
-				if canRead {
-					errors = append(errors, fmt.Sprintf("User %s should have read access to maintenance %s but got status %d", authUUID, maintenanceRow[0], w.Code))
-				}
-			} else {
-				errors = append(errors, fmt.Sprintf("Unexpected status code %d for user %s reading maintenance %s", w.Code, authUUID, maintenanceRow[0]))
+				continue
 			}
 
-		}
-	}
+			if w.Code != http.StatusOK {
+				t.Errorf("%s reading maintenance %s: expected 200, got %d", user.Username, fixture.ID, w.Code)
+				continue
+			}
 
-	for _, errorMessage := range errors {
-		t.Error(errorMessage)
+			var response maintenanceResponse
+			testutil.DecodeJSON(t, w, &response)
+			assertMaintenance(t, response, expectedMaintenance(fixture))
+		}
 	}
 }
 
 func TestMaintenanceWritePermissions(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var errors []string
+	for _, fixture := range testutil.Maintenances {
+		vi := vehicleIndex(fixture.VehicleID)
+		for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+			user := testutil.Users[userIndex]
 
-	for maintenanceRowIndex, maintenanceRow := range AllMaintenances {
-		maintenance := loadMaintenanceRecord(maintenanceRowIndex)
-		for userIndex, userRow := range AllUsers {
-			authUUID := userRow[0]
-			permission := VehicleAccessMatrix[userIndex][maintenanceRow[1].(int)]
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), user.ID,
+				testutil.JSONBody(t, map[string]any{"notes": fixture.Notes + " MODIFIED"}))
 
-			modified := models.MaintenanceRecordBase{
-				Notes: Notes + " MODIFIED",
-			}
-			Notes = modified.Notes
-			bodyBytes, err := json.Marshal(modified)
-			if err != nil {
-				t.Fatalf("Failed to marshal modified maintenance record: %v", err)
-			}
-			bodyReader := bytes.NewReader(bodyBytes)
-
-			w := helpers.TestRequestAsUser(r, "PATCH", "/v1/maintenance/"+maintenanceRow[0].(string), authUUID, bodyReader)
-			if w.Code == http.StatusOK {
-				if permission < WRITE {
-					errors = append(errors, fmt.Sprintf("User %s should not have write access to maintenance %s but got status %d", userRow[1], maintenanceRow[4], w.Code))
-					continue
+			switch {
+			case accessRow[vi] == testutil.WRITE:
+				if w.Code != http.StatusOK {
+					t.Errorf("%s patching maintenance %s: expected 200, got %d", user.Username, fixture.ID, w.Code)
 				}
-				var response models.MaintenanceRecordBase
-				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-					errors = append(errors, fmt.Sprintf("Failed to unmarshal response for user %s and maintenance %s: %v", userRow[1], maintenanceRow[4], err))
-					continue
+			case accessRow[vi] == testutil.READ_ONLY:
+				if w.Code != http.StatusForbidden {
+					t.Errorf("%s patching maintenance %s: expected 403, got %d", user.Username, fixture.ID, w.Code)
 				}
-				if errMsg := validateMaintenanceResponse(response, maintenance); errMsg != "" {
-					errors = append(errors, fmt.Sprintf("Validation error for user %s on maintenance %s: %s", userRow[1], maintenanceRow[4], errMsg))
+			default:
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s patching maintenance %s: expected 404, got %d", user.Username, fixture.ID, w.Code)
 				}
-			} else if w.Code == http.StatusNotFound {
-				if permission == WRITE {
-					errors = append(errors, fmt.Sprintf("User %s should have write access to maintenance %s but got status %d", userRow[1], maintenanceRow[4], w.Code))
-				} else if permission == READ_ONLY {
-					errors = append(errors, fmt.Sprintf("User %s should not get 404 to maintenance %s but got status %d", userRow[1], maintenanceRow[4], w.Code))
-				}
-			} else if w.Code == http.StatusForbidden {
-				if permission == WRITE {
-					errors = append(errors, fmt.Sprintf("User %s should have write access to maintenance %s but got status %d", userRow[1], maintenanceRow[4], w.Code))
-				} else if permission == NO_ACCESS {
-					errors = append(errors, fmt.Sprintf("User %s should not not get 403 to maintenance %s but got status %d", userRow[1], maintenanceRow[4], w.Code))
-				}
-			} else {
-				errors = append(errors, fmt.Sprintf("Unexpected status code %d for user %s reading maintenance %s", w.Code, userRow[1], maintenanceRow[4]))
-			}
-
-		}
-	}
-
-	for _, errorMessage := range errors {
-		t.Error(errorMessage)
-	}
-}
-
-func TestMaintenanceListPermissions(t *testing.T) {
-	r, _ := server.SetupTest(t)
-
-	var errors []string
-
-	for userIndex, userRow := range AllUsers {
-		authUUID := userRow[0]
-		for vehicleIndex, vehicleRow := range AllVehicles {
-			vehicleUUID := vehicleRow[0].(string)
-			canRead := VehicleAccessMatrix[userIndex][vehicleIndex] >= READ_ONLY
-
-			w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicleUUID+"/maintenance", authUUID, nil)
-			if w.Code == http.StatusOK {
-				if !canRead {
-					errors = append(errors, fmt.Sprintf("User %s should not have read access to maintenance list for vehicle %s but got status %d", authUUID, vehicleUUID, w.Code))
-				}
-			} else if w.Code == http.StatusNotFound {
-				if canRead {
-					errors = append(errors, fmt.Sprintf("User %s should have read access to maintenance list for vehicle %s but got status %d", authUUID, vehicleUUID, w.Code))
-				}
-			} else {
-				errors = append(errors, fmt.Sprintf("Unexpected status code %d for user %s reading maintenance list for vehicle %s", w.Code, authUUID, vehicleUUID))
 			}
 		}
-	}
-
-	for _, errorMessage := range errors {
-		t.Error(errorMessage)
 	}
 }
 
 func TestMaintenanceDeletePermissions(t *testing.T) {
-	r, a := server.SetupTest(t)
+	env := testutil.SetupTest(t)
+	tx := env.DB.GetGorm()
 
-	var errors []string
+	for _, fixture := range testutil.Maintenances {
+		vi := vehicleIndex(fixture.VehicleID)
+		for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+			user := testutil.Users[userIndex]
 
-	for maintenanceIndex, maintenanceRow := range AllMaintenances {
-		for userIndex, userRow := range AllUsers {
-			authUUID := userRow[UserFields["uuid"]]
-			vehicleIndex := maintenanceRow[MaintenanceFields["vehicleIndex"]].(int)
-			access := VehicleAccessMatrix[userIndex][vehicleIndex]
+			if err := tx.SavePoint("maintenance_delete").Error; err != nil {
+				t.Fatalf("creating savepoint: %v", err)
+			}
 
-			a.Gorm.SavePoint("TestMaintenanceDelete")
-			w := helpers.TestRequestAsUser(r, "DELETE", "/v1/maintenance/"+maintenanceRow[MaintenanceFields["uuid"]].(string), authUUID, nil)
-			a.Gorm.RollbackTo("TestMaintenanceDelete")
+			w := testutil.RequestAsUser(t, env.Router, http.MethodDelete, "/v1/maintenance/"+fixture.ID.String(), user.ID, nil)
 
-			switch w.Code {
-			case http.StatusNoContent:
-				if access != WRITE {
-					errors = append(errors, fmt.Sprintf("User %s should not have delete access to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+			if err := tx.RollbackTo("maintenance_delete").Error; err != nil {
+				t.Fatalf("rolling back to savepoint: %v", err)
+			}
+
+			switch {
+			case accessRow[vi] == testutil.WRITE:
+				if w.Code != http.StatusNoContent {
+					t.Errorf("%s deleting maintenance %s: expected 204, got %d", user.Username, fixture.ID, w.Code)
 				}
-			case http.StatusNotFound:
-				if access == WRITE {
-					errors = append(errors, fmt.Sprintf("User %s should have delete access to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
-				} else if access == READ_ONLY {
-					errors = append(errors, fmt.Sprintf("User %s should get 403 to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
-				}
-			case http.StatusForbidden:
-				if access == WRITE {
-					errors = append(errors, fmt.Sprintf("User %s should have delete access to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
-				} else if access != READ_ONLY {
-					errors = append(errors, fmt.Sprintf("User %s should get 404 to maintenance %d (vehicle %d) but got status %d", userRow[UserFields["username"]], maintenanceIndex, vehicleIndex, w.Code))
+			case accessRow[vi] == testutil.READ_ONLY:
+				if w.Code != http.StatusForbidden {
+					t.Errorf("%s deleting maintenance %s: expected 403, got %d", user.Username, fixture.ID, w.Code)
 				}
 			default:
-				errors = append(errors, fmt.Sprintf("Unexpected status code %d for user %s deleting maintenance %d (vehicle %d)", w.Code, userRow[UserFields["username"]], maintenanceIndex, vehicleIndex))
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s deleting maintenance %s: expected 404, got %d", user.Username, fixture.ID, w.Code)
+				}
 			}
 		}
-	}
-
-	for _, errorMessage := range errors {
-		t.Error(errorMessage)
 	}
 }
 
 func TestMaintenanceEdgeCases(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	authUUID := AllUsers[0][0]
-	unusedUUID := "0195fba0-de33-79e3-ab0c-7357d15cbb3d"
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/maintenance/invalid-uuid", testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusBadRequest)
 
-	// Test getting maintenance with invalid UUID
-	w := helpers.TestRequestAsUser(r, "GET", "/v1/maintenance/invalid-uuid", authUUID, nil)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status code %d for invalid UUID, got %d", http.StatusBadRequest, w.Code)
-	}
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/0195fba0-de33-79e3-ab0c-7357d15cbb3d/maintenance", testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
 
-	// Test getting maintenance with unused UUID
-	w = helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+unusedUUID+"/maintenance", authUUID, nil)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Expected status code %d for unused UUID, got %d", http.StatusNotFound, w.Code)
-	}
-
-	// Test posting maintenance with bad JSON
-	badJSON := "{invalid-json}"
-	bodyReader := bytes.NewReader([]byte(badJSON))
-	w = helpers.TestRequestAsUser(r, "POST", "/v1/maintenance", authUUID, bodyReader)
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Errorf("Expected status code %d for bad JSON, got %d", http.StatusUnprocessableEntity, w.Code)
-	}
-}
-
-func TestFiles(t *testing.T) {
-	r, _ := server.SetupTest(t)
-
-	userUuid := users.AllUsers[0][0]
-	maintenanceUuid := AllMaintenances[0][0].(string)
-
-	bodyReader := bytes.NewReader([]byte(`{"isFile": true}`))
-
-	w := helpers.TestRequestAsUser(r, "POST", "/v1/file/maintenance/"+maintenanceUuid, userUuid, bodyReader)
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code %d for file upload, got %d\n%s", http.StatusCreated, w.Code, w.Body.String())
-	}
-
-	w = helpers.TestRequestAsUser(r, "GET", "/v1/file/maintenance/"+maintenanceUuid, userUuid, nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d for files list, got %d\n%s", http.StatusOK, w.Code, w.Body.String())
-	}
-
-	data := []struct {
-		ID  string `json:"id"`
-		URL string `json:"signed_url"`
-	}{}
-	_ = json.Unmarshal(w.Body.Bytes(), &data)
-
-	googleResp, err := http.Get(data[0].URL)
-	if err != nil {
-		t.Errorf("Failed to GET signed URL: %v", err)
-	}
-	defer googleResp.Body.Close()
-	if googleResp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status code %d for signed URL, got %d", http.StatusOK, googleResp.StatusCode)
-	}
-
-	w = helpers.TestRequestAsUser(r, "DELETE", "/v1/file/"+data[0].ID, userUuid, nil)
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Expected status code %d for file delete, got %d\n%s", http.StatusNoContent, w.Code, w.Body.String())
-	}
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", testutil.User1ID,
+		strings.NewReader("{invalid-json}"))
+	testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
 }

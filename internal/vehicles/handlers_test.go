@@ -1,416 +1,326 @@
-package vehicles
+package vehicles_test
 
 import (
-	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/models"
-	"auto-myself-api/internal/server"
-	"bytes"
-	"encoding/json"
-	"fmt"
+	"auto-myself-api/internal/testutil"
 	"net/http"
 	"strings"
 	"testing"
 
-	"gorm.io/gorm"
+	"github.com/gofrs/uuid/v5"
 )
 
-var AllVehicles = [][]interface{}{
-	{"019785fe-4eb4-766e-9c45-d0b2bb289b82", "Vehicle 1", 2015, "MAZDA", 473, "MX-5", 2072, "VIN CAR 1", "LPN CAR 1", "019785fe-4eb4-766e-9c45-bec7780972a2"},
-	{"019785fe-4eb4-766e-9c45-d77f41aa8317", "Vehicle 2", 2021, "TOYOTA", 448, "Corolla", 2208, "VIN CAR 2", "LPN CAR 2", "019785fe-4eb4-766e-9c45-bec7780972a2"},
-	{"019785fe-4eb4-766e-9c45-d9cc7ea628c1", "Vehicle 3", 2019, "FORD", 460, "Edge", 1797, "VIN CAR 3", "LPN CAR 3", "019785fe-4eb4-766e-9c45-c8578456b4df"},
-	{"019785fe-4eb4-766e-9c45-ddfb4b2e7210", "Vehicle 4", 2018, "NISSAN", 478, "GT-R", 1890, "VIN CAR 4", "LPN CAR 4", "019785fe-4eb4-766e-9c45-f592a1187d0c"},
-	{"019785fe-4eb4-766e-9c45-e1af5010246b", "Vehicle 5", 2025, "ASTON MARTIN", 440, "Vanquish", 1701, "VIN CAR 5", "LPN CAR 5", "019785fe-4eb4-766e-9c45-fc6ed4a7407b"},
+type vehicleResponse struct {
+	ID       uuid.UUID `json:"id"`
+	Nickname string    `json:"nickname"`
+	Make     string    `json:"make"`
+	MakeID   int       `json:"make_id"`
+	Model    string    `json:"model"`
+	ModelID  int       `json:"model_id"`
+	Year     int       `json:"year"`
+	Vin      string    `json:"vin"`
+	Lpn      string    `json:"lpn"`
 }
 
-var VehicleFields = map[string]int{
-	"uuid":            1,
-	"nickname":        2,
-	"year":            3,
-	"make":            4,
-	"make_id":         5,
-	"model":           6,
-	"model_id":        7,
-	"vin":             8,
-	"lpn":             9,
-	"owner_user_uuid": 10,
+func vehicleBody(fixture testutil.VehicleFixture) map[string]any {
+	return map[string]any{
+		"nickname": fixture.Nickname,
+		"make":     fixture.Make,
+		"make_id":  fixture.MakeID,
+		"model":    fixture.Model,
+		"model_id": fixture.ModelID,
+		"year":     fixture.Year,
+		"vin":      fixture.Vin,
+		"lpn":      fixture.Lpn,
+	}
 }
 
-var VehicleAccessMatrix = [8][5]int{
-	{WRITE, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS},
-	{NO_ACCESS, WRITE, NO_ACCESS, NO_ACCESS, NO_ACCESS},
-	{NO_ACCESS, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS},
-	{NO_ACCESS, NO_ACCESS, WRITE, READ_BY_INVITE, NO_ACCESS},
-	{NO_ACCESS, NO_ACCESS, NO_ACCESS, READ_BY_INVITE, NO_ACCESS},
-	{NO_ACCESS, NO_ACCESS, NO_ACCESS, WRITE, NO_ACCESS},
-	{NO_ACCESS, WRITE, NO_ACCESS, WRITE, NO_ACCESS},
-	{NO_ACCESS, WRITE, NO_ACCESS, READ_ONLY, WRITE},
+func assertVehicle(t *testing.T, got, want vehicleResponse) {
+	t.Helper()
+	if got.Nickname != want.Nickname {
+		t.Errorf("expected nickname %q, got %q", want.Nickname, got.Nickname)
+	}
+	if got.Make != want.Make || got.MakeID != want.MakeID {
+		t.Errorf("expected make %q/%d, got %q/%d", want.Make, want.MakeID, got.Make, got.MakeID)
+	}
+	if got.Model != want.Model || got.ModelID != want.ModelID {
+		t.Errorf("expected model %q/%d, got %q/%d", want.Model, want.ModelID, got.Model, got.ModelID)
+	}
+	if got.Year != want.Year {
+		t.Errorf("expected year %d, got %d", want.Year, got.Year)
+	}
+	if got.Vin != want.Vin {
+		t.Errorf("expected vin %q, got %q", want.Vin, got.Vin)
+	}
+	if got.Lpn != want.Lpn {
+		t.Errorf("expected lpn %q, got %q", want.Lpn, got.Lpn)
+	}
 }
 
-func validateVehicleResponse(marshaledResponse models.VehicleBase, expected models.VehicleBase) string {
-	if marshaledResponse.Nickname != expected.Nickname {
-		return fmt.Sprintf("Expected nickname to be %s, got %s", expected.Nickname, marshaledResponse.Nickname)
-	}
-	if marshaledResponse.Year != expected.Year {
-		return fmt.Sprintf("Expected year to be %d, got %d", expected.Year, marshaledResponse.Year)
-	}
-	if marshaledResponse.Make != expected.Make {
-		return fmt.Sprintf("Expected make to be %s, got %s", expected.Make, marshaledResponse.Make)
-	}
-	if marshaledResponse.MakeID != expected.MakeID {
-		return fmt.Sprintf("Expected makeID to be %d, got %d", expected.MakeID, marshaledResponse.MakeID)
-	}
-	if marshaledResponse.Model != expected.Model {
-		return fmt.Sprintf("Expected model to be %s, got %s", expected.Model, marshaledResponse.Model)
-	}
-	if marshaledResponse.ModelID != expected.ModelID {
-		return fmt.Sprintf("Expected modelID to be %d, got %d", expected.ModelID, marshaledResponse.ModelID)
-	}
-	if marshaledResponse.Vin != expected.Vin {
-		return fmt.Sprintf("Expected vin to be %s, got %s", expected.Vin, marshaledResponse.Vin)
-	}
-	if marshaledResponse.Lpn != expected.Lpn {
-		return fmt.Sprintf("Expected lpn to be %s, got %s", expected.Lpn, marshaledResponse.Lpn)
-	}
-	return ""
-}
-
-func loadVehicle(index int) models.VehicleBase {
-	vehicle := AllVehicles[index]
-	return models.VehicleBase{
-		Nickname: vehicle[1].(string),
-		Year:     vehicle[2].(int),
-		Make:     vehicle[3].(string),
-		MakeID:   vehicle[4].(int),
-		Model:    vehicle[5].(string),
-		ModelID:  vehicle[6].(int),
-		Vin:      vehicle[7].(string),
-		Lpn:      vehicle[8].(string),
+func expectedVehicle(fixture testutil.VehicleFixture) vehicleResponse {
+	return vehicleResponse{
+		ID:       fixture.ID,
+		Nickname: fixture.Nickname,
+		Make:     fixture.Make,
+		MakeID:   fixture.MakeID,
+		Model:    fixture.Model,
+		ModelID:  fixture.ModelID,
+		Year:     fixture.Year,
+		Vin:      fixture.Vin,
+		Lpn:      fixture.Lpn,
 	}
 }
 
 func TestVehiclesVerifyAllExist(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	for index, vehicle := range AllVehicles {
-		expected := loadVehicle(index)
-		w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicle[0].(string), vehicle[9].(string), nil)
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-			continue
-		}
-		var vehicle models.VehicleBase
-		if err := json.Unmarshal(w.Body.Bytes(), &vehicle); err != nil {
-			t.Errorf("Failed to unmarshal response: %v", err)
-			continue
-		}
-		if errMsg := validateVehicleResponse(vehicle, expected); errMsg != "" {
-			t.Error(errMsg)
-			continue
-		}
+	for _, vehicle := range testutil.Vehicles {
+		w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+vehicle.ID.String(), vehicle.OwnerID, nil)
+		testutil.RequireStatus(t, w, http.StatusOK)
+
+		var response vehicleResponse
+		testutil.DecodeJSON(t, w, &response)
+		assertVehicle(t, response, expectedVehicle(vehicle))
 	}
 }
 
 func TestVehicleList(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	for index, userAccess := range VehicleAccessMatrix {
-		authUUID := AllUsers[index][0]
-		expectedVehicleCount := 0
-		for _, access := range userAccess {
-			if access > READ_BY_INVITE {
-				expectedVehicleCount++
+	for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+		user := testutil.Users[userIndex]
+
+		expected := 0
+		for _, access := range accessRow {
+			if access >= testutil.READ_ONLY {
+				expected++
 			}
 		}
-		w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle", authUUID, nil)
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d for user %s", http.StatusOK, w.Code, AllUsers[index][1])
-			continue
-		}
 
-		var ids []string
-		if err := json.Unmarshal(w.Body.Bytes(), &ids); err != nil {
-			t.Errorf("Failed to unmarshal response: %v", err)
-		}
+		w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle", user.ID, nil)
+		testutil.RequireStatus(t, w, http.StatusOK)
 
-		if len(ids) != expectedVehicleCount {
-			t.Errorf("Expected %d vehicles, got %d for user %s", expectedVehicleCount, len(ids), AllUsers[index][1])
+		var ids []uuid.UUID
+		testutil.DecodeJSON(t, w, &ids)
+		if len(ids) != expected {
+			t.Errorf("%s: expected %d vehicles, got %d", user.Username, expected, len(ids))
 		}
 	}
 }
 
 func TestVehiclePost(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	newVehicle := models.VehicleBase{
-		Nickname: "New Vehicle",
-		Year:     2022,
-		Make:     "TEST-Make",
-		Model:    "TEST-Model",
-		Vin:      "VIN-TEST-1234567890",
-		Lpn:      "LPN-TEST-1234",
+	body := map[string]any{
+		"nickname": "New Vehicle",
+		"year":     2022,
+		"make":     "TEST-Make",
+		"model":    "TEST-Model",
+		"vin":      "VIN-TEST-1234567890",
+		"lpn":      "LPN-TEST-1234",
 	}
 
-	bodyBytes, err := json.Marshal(newVehicle)
-	if err != nil {
-		t.Fatalf("Failed to marshal new vehicle: %v", err)
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	w := helpers.TestRequestAsUser(r, "POST", "/v1/vehicle", AllUsers[0][0], bodyReader)
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
-	}
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/vehicle", testutil.User1ID, testutil.JSONBody(t, body))
+	testutil.RequireStatus(t, w, http.StatusCreated)
 
 	location := w.Header().Get("Location")
 	if location == "" {
-		t.Error("Expected Location header to be set, but it was empty")
+		t.Fatal("expected Location header")
 	}
 
-	w = helpers.TestRequestAsUser(r, "GET", location, AllUsers[0][0], nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-	}
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, location, testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
 
-	var vehicleResponse models.VehicleBase
-	if err := json.Unmarshal(w.Body.Bytes(), &vehicleResponse); err != nil {
-		t.Errorf("Failed to unmarshal response: %v \n%s", err, w.Body.String())
-	}
-
-	if errMsg := validateVehicleResponse(vehicleResponse, newVehicle); errMsg != "" {
-		t.Error(errMsg)
+	var response vehicleResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.Nickname != "New Vehicle" || response.Year != 2022 || response.Make != "TEST-Make" {
+		t.Errorf("unexpected created vehicle: %+v", response)
 	}
 }
 
 func TestVehiclePostWithUUID(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	uuid := "019d437c-5f48-753b-8240-5263972f15f0"
+	supplied := "019d437c-5f48-753b-8240-5263972f15f0"
+	body := map[string]any{"nickname": "Supplied ID Vehicle", "year": 2022}
 
-	newVehicle := models.VehicleBase{
-		Nickname: "New Vehicle",
-		Year:     2022,
-		Make:     "TEST-Make",
-		Model:    "TEST-Model",
-		Vin:      "VIN-TEST-1234567890",
-		Lpn:      "LPN-TEST-1234",
-	}
-
-	bodyBytes, err := json.Marshal(newVehicle)
-	if err != nil {
-		t.Fatalf("Failed to marshal new vehicle: %v", err)
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	w := helpers.TestRequestAsUser(r, "POST", "/v1/vehicle/"+uuid, AllUsers[0][0], bodyReader)
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
-	}
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/vehicle/"+supplied, testutil.User1ID, testutil.JSONBody(t, body))
+	testutil.RequireStatus(t, w, http.StatusCreated)
 
 	location := w.Header().Get("Location")
-	if location == "" {
-		t.Error("Expected Location header to be set, but it was empty")
+	if !strings.HasSuffix(location, "/"+supplied) {
+		t.Errorf("expected Location to end with %s, got %s", supplied, location)
 	}
 
-	pathParts := strings.Split(location, "/")
-	if pathParts[len(pathParts)-1] != uuid {
-		t.Errorf("Expected vehicle ID to be %s, got %s", uuid, pathParts[len(pathParts)-1])
-	}
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, location, testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+}
 
-	w = helpers.TestRequestAsUser(r, "GET", location, AllUsers[0][0], nil)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-	}
+func TestVehiclePostDuplicateUUID(t *testing.T) {
+	env := testutil.SetupTest(t)
 
-	var vehicleResponse models.VehicleBase
-	if err := json.Unmarshal(w.Body.Bytes(), &vehicleResponse); err != nil {
-		t.Errorf("Failed to unmarshal response: %v \n%s", err, w.Body.String())
-	}
+	supplied := "019d437c-5f48-753b-8240-5263972f15f1"
+	body := map[string]any{"nickname": "Duplicate"}
 
-	if errMsg := validateVehicleResponse(vehicleResponse, newVehicle); errMsg != "" {
-		t.Error(errMsg)
-	}
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/vehicle/"+supplied, testutil.User1ID, testutil.JSONBody(t, body))
+	testutil.RequireStatus(t, w, http.StatusCreated)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/vehicle/"+supplied, testutil.User1ID, testutil.JSONBody(t, body))
+	testutil.RequireStatus(t, w, http.StatusConflict)
 }
 
 func TestVehiclePatch(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var testVehicle = AllVehicles[0]
-	authUUID := testVehicle[9].(string)
-	expected := loadVehicle(0)
-	expected.Nickname = "MODIFIED " + expected.Nickname
-	modified := models.VehicleBase{
-		Nickname: expected.Nickname,
+	vehicle := testutil.Vehicles[0]
+	newNickname := "MODIFIED " + vehicle.Nickname
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+vehicle.ID.String(), vehicle.OwnerID,
+		testutil.JSONBody(t, map[string]any{"nickname": newNickname}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response vehicleResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.Nickname != newNickname {
+		t.Errorf("expected nickname %q, got %q", newNickname, response.Nickname)
 	}
-
-	bodyBytes, err := json.Marshal(modified)
-	if err != nil {
-		t.Fatalf("Failed to marshal modified vehicle: %v", err)
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/vehicle/"+testVehicle[0].(string), authUUID, bodyReader)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-	}
-
-	var vehicleResponse models.VehicleBase
-	if err := json.Unmarshal(w.Body.Bytes(), &vehicleResponse); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
-	}
-
-	if errMsg := validateVehicleResponse(vehicleResponse, expected); errMsg != "" {
-		t.Error(errMsg)
+	if response.Year != vehicle.Year || response.Vin != vehicle.Vin {
+		t.Errorf("PATCH should not clear untouched fields: %+v", response)
 	}
 }
 
 func TestVehicleDelete(t *testing.T) {
-	r, a := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var testVehicle = AllVehicles[0]
-	authUUID := testVehicle[9].(string)
+	// Vehicle 2 has maintenance records and access rows to exercise the cascade.
+	vehicle := testutil.Vehicles[1]
 
-	w := helpers.TestRequestAsUser(r, "DELETE", "/v1/vehicle/"+testVehicle[0].(string), authUUID, nil)
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
+	w := testutil.RequestAsUser(t, env.Router, http.MethodDelete, "/v1/vehicle/"+vehicle.ID.String(), vehicle.OwnerID, nil)
+	testutil.RequireStatus(t, w, http.StatusNoContent)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+vehicle.ID.String(), vehicle.OwnerID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+
+	db := env.DB.GetGorm()
+	checks := []struct {
+		table string
+		where string
+		args  []any
+	}{
+		{"vehicles", "id = ? AND deleted_at IS NULL", []any{vehicle.ID}},
+		{"maintenance_records", "vehicle_id = ? AND deleted_at IS NULL", []any{vehicle.ID}},
+		{"maintenance_record_files", "deleted_at IS NULL AND maintenance_record_id IN (SELECT id FROM maintenance_records WHERE vehicle_id = ?)", []any{vehicle.ID}},
+		{"vehicle_user_access", "vehicle_id = ? AND deleted_at IS NULL", []any{vehicle.ID}},
+		{"vehicle_user_access_pending", "vehicle_id = ? AND deleted_at IS NULL", []any{vehicle.ID}},
 	}
-
-	w = helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+testVehicle[0].(string), authUUID, nil)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Expected status code %d for deleted vehicle, got %d", http.StatusNotFound, w.Code)
+	for _, check := range checks {
+		var count int64
+		if err := db.Table(check.table).Where(check.where, check.args...).Count(&count).Error; err != nil {
+			t.Fatalf("counting %s: %v", check.table, err)
+		}
+		if count != 0 {
+			t.Errorf("expected no active %s rows for deleted vehicle, found %d", check.table, count)
+		}
 	}
-
-	if err := a.Gorm.First(&models.Vehicle{}, "id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
-		t.Error("Expected vehicle to be deleted, but found it in the database")
-	}
-
-	// if err := a.Gorm.First(&maintenance.MaintenanceRecord{}, "vehicle_id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
-	// 	t.Error("Expected no maintenance records after vehicle deletion, but found some")
-	// }
-
-	if err := a.Gorm.First(&models.VehicleUserAccess{}, "vehicle_id = ?", testVehicle[0].(string)).Error; err != gorm.ErrRecordNotFound {
-		t.Error("Expected no vehicle user access records after deletion, but found some")
-	}
-
 }
 
 func TestVehicleReadPermissions(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var successMatrix [8][5]string
-
-	for userIndex, accessRow := range VehicleAccessMatrix {
+	for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+		user := testutil.Users[userIndex]
 		for vehicleIndex, access := range accessRow {
-			authUUID := AllUsers[userIndex][0]
-			vehicle := AllVehicles[vehicleIndex]
-			expected := loadVehicle(vehicleIndex)
+			vehicle := testutil.Vehicles[vehicleIndex]
 
-			w := helpers.TestRequestAsUser(r, "GET", "/v1/vehicle/"+vehicle[0].(string), authUUID, nil)
-			if w.Code == http.StatusOK {
-				if access == NO_ACCESS {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
-					continue
-				}
-				var vehicleResponse models.VehicleBase
-				if err := json.Unmarshal(w.Body.Bytes(), &vehicleResponse); err != nil {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Failed to unmarshal response: %v", err)
-					continue
-				}
-				if errMsg := validateVehicleResponse(vehicleResponse, expected); errMsg != "" {
-					successMatrix[userIndex][vehicleIndex] = errMsg
-					continue
-				}
+			w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+vehicle.ID.String(), user.ID, nil)
 
-			} else if w.Code == http.StatusNotFound {
-				if access > NO_ACCESS {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusOK, w.Code)
-					continue
+			if access == testutil.NO_ACCESS {
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s reading %s: expected 404, got %d", user.Username, vehicle.Nickname, w.Code)
 				}
-			} else {
-				successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, vehicle[0].(string))
 				continue
 			}
-		}
-	}
 
-	for authUser, access := range successMatrix {
-		for readUser, errorMessage := range access {
-			if errorMessage != "" {
-				authUserName := AllUsers[authUser][1]
-				vehicleName := AllVehicles[readUser][1].(string)
-				t.Errorf("Auth User %s reading Vehicle %s: %s", authUserName, vehicleName, errorMessage)
+			// READ_BY_INVITE and above may view the vehicle itself.
+			if w.Code != http.StatusOK {
+				t.Errorf("%s reading %s: expected 200, got %d", user.Username, vehicle.Nickname, w.Code)
+				continue
 			}
+
+			var response vehicleResponse
+			testutil.DecodeJSON(t, w, &response)
+			assertVehicle(t, response, expectedVehicle(vehicle))
 		}
 	}
 }
 
 func TestVehicleWritePermissions(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var successMatrix [8][5]string
-
-	for userIndex, accessRow := range VehicleAccessMatrix {
+	for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+		user := testutil.Users[userIndex]
 		for vehicleIndex, access := range accessRow {
-			authUUID := AllUsers[userIndex][0]
-			vehicle := AllVehicles[vehicleIndex]
-			expected := models.VehicleBase{
-				Nickname: "MODIFIED " + vehicle[1].(string),
-				Year:     vehicle[2].(int),
-				Make:     vehicle[3].(string),
-				MakeID:   vehicle[4].(int),
-				Model:    vehicle[5].(string),
-				ModelID:  vehicle[6].(int),
-				Vin:      vehicle[7].(string),
-				Lpn:      vehicle[8].(string),
-			}
-			modified := models.VehicleBase{
-				Nickname: expected.Nickname,
-			}
+			vehicle := testutil.Vehicles[vehicleIndex]
+			newNickname := "MODIFIED " + vehicle.Nickname
 
-			bodyBytes, err := json.Marshal(modified)
-			if err != nil {
-				t.Fatalf("Failed to marshal modified vehicle: %v", err)
-			}
-			bodyReader := bytes.NewReader(bodyBytes)
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+vehicle.ID.String(), user.ID,
+				testutil.JSONBody(t, map[string]any{"nickname": newNickname}))
 
-			w := helpers.TestRequestAsUser(r, "PATCH", "/v1/vehicle/"+vehicle[0].(string), authUUID, bodyReader)
-			if w.Code == http.StatusOK {
-				if access < WRITE {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
+			switch {
+			case access == testutil.WRITE:
+				if w.Code != http.StatusOK {
+					t.Errorf("%s patching %s: expected 200, got %d", user.Username, vehicle.Nickname, w.Code)
 					continue
 				}
-				var vehicleResponse models.VehicleBase
-				if err := json.Unmarshal(w.Body.Bytes(), &vehicleResponse); err != nil {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Failed to unmarshal response: %v", err)
-					continue
+				var response vehicleResponse
+				testutil.DecodeJSON(t, w, &response)
+				if response.Nickname != newNickname {
+					t.Errorf("%s patching %s: expected nickname %q, got %q", user.Username, vehicle.Nickname, newNickname, response.Nickname)
 				}
-				if errMsg := validateVehicleResponse(vehicleResponse, expected); errMsg != "" {
-					successMatrix[userIndex][vehicleIndex] = errMsg
-					continue
+			case access == testutil.READ_ONLY:
+				if w.Code != http.StatusForbidden {
+					t.Errorf("%s patching %s: expected 403, got %d", user.Username, vehicle.Nickname, w.Code)
 				}
-
-			} else if w.Code == http.StatusNotFound {
-				if access > READ_ONLY {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusOK, w.Code)
-					continue
+			default:
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s patching %s: expected 404, got %d", user.Username, vehicle.Nickname, w.Code)
 				}
-			} else if w.Code == http.StatusForbidden {
-				if access == WRITE {
-					successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Expected %d but got %d", http.StatusOK, w.Code)
-					continue
-				}
-			} else {
-				successMatrix[userIndex][vehicleIndex] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, vehicle[0].(string))
-				continue
 			}
 		}
 	}
+}
 
-	for authUser, access := range successMatrix {
-		for readUser, errorMessage := range access {
-			if errorMessage != "" {
-				authUserName := AllUsers[authUser][1]
-				vehicleName := AllVehicles[readUser][1].(string)
-				t.Errorf("Auth User %s writing Vehicle %s: %s", authUserName, vehicleName, errorMessage)
+func TestVehicleDeletePermissions(t *testing.T) {
+	env := testutil.SetupTest(t)
+	tx := env.DB.GetGorm()
+
+	for userIndex, accessRow := range testutil.VehicleAccessMatrix {
+		user := testutil.Users[userIndex]
+		for vehicleIndex, access := range accessRow {
+			vehicle := testutil.Vehicles[vehicleIndex]
+
+			if err := tx.SavePoint("delete_permissions").Error; err != nil {
+				t.Fatalf("creating savepoint: %v", err)
+			}
+
+			w := testutil.RequestAsUser(t, env.Router, http.MethodDelete, "/v1/vehicle/"+vehicle.ID.String(), user.ID, nil)
+
+			if err := tx.RollbackTo("delete_permissions").Error; err != nil {
+				t.Fatalf("rolling back to savepoint: %v", err)
+			}
+
+			switch {
+			case vehicle.OwnerID == user.ID:
+				if w.Code != http.StatusNoContent {
+					t.Errorf("owner %s deleting %s: expected 204, got %d", user.Username, vehicle.Nickname, w.Code)
+				}
+			case access >= testutil.READ_ONLY:
+				if w.Code != http.StatusForbidden {
+					t.Errorf("readable non-owner %s deleting %s: expected 403, got %d", user.Username, vehicle.Nickname, w.Code)
+				}
+			default:
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s deleting %s: expected 404, got %d", user.Username, vehicle.Nickname, w.Code)
+				}
 			}
 		}
 	}

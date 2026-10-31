@@ -1,172 +1,159 @@
-package users
+package users_test
 
 import (
-	"auto-myself-api/internal/helpers"
-	"auto-myself-api/internal/server"
-	"bytes"
-	"encoding/json"
-	"fmt"
+	"auto-myself-api/internal/testutil"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/gofrs/uuid/v5"
 )
 
-var AllUsers = [][]string{
-	{"019785fe-4eb4-766e-9c45-bec7780972a2", "User 1"},
-	{"019785fe-4eb4-766e-9c45-c1f83e7c1f1f", "User 2"},
-	{"019785fe-4eb4-766e-9c45-c497f2d9fe9e", "User 3"},
-	{"019785fe-4eb4-766e-9c45-c8578456b4df", "User 4"},
-	{"019785fe-4eb4-766e-9c45-cec136a9ad6f", "User 5"},
-	{"019785fe-4eb4-766e-9c45-f592a1187d0c", "User 6"},
-	{"019785fe-4eb4-766e-9c45-f9cd4ee5c0b3", "User 7"},
-	{"019785fe-4eb4-766e-9c45-fc6ed4a7407b", "User 8"},
-}
-
-var UserFields = map[string]int{
-	"uuid":     0,
-	"username": 1,
-}
-
-var UserAccessMatrix = [8][8]int{
-	{helpers.WRITE, helpers.READ_ONLY, helpers.READ_ONLY, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY},
-	{helpers.READ_ONLY, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY},
-	{helpers.READ_ONLY, helpers.READ_ONLY, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY},
-	{helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS},
-	{helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.WRITE, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS},
-	{helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.WRITE, helpers.READ_ONLY, helpers.READ_ONLY},
-	{helpers.READ_ONLY, helpers.READ_ONLY, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.WRITE, helpers.READ_ONLY},
-	{helpers.READ_ONLY, helpers.READ_ONLY, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.NO_ACCESS, helpers.READ_ONLY, helpers.READ_ONLY, helpers.WRITE},
-}
-
-func validateUserResponse(marshaledResponse UserWeb, expected UserWeb) string {
-	if marshaledResponse.Username != expected.Username {
-		return fmt.Sprintf("Expected username to be %s, got %s", expected.Username, marshaledResponse.Username)
-	}
-	return ""
-}
-
-func loadUser(index int) UserWeb {
-	user := AllUsers[index]
-	return UserWeb{
-		UserPost: UserPost{
-			Username: user[1],
-		},
-	}
+type userResponse struct {
+	ID       uuid.UUID `json:"ID"`
+	Username string    `json:"username"`
 }
 
 func TestUsersVerifyAllExist(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	for index, userRow := range AllUsers {
-		uuid := userRow[0]
-		user := loadUser(index)
+	for _, user := range testutil.Users {
+		w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user", user.ID, nil)
+		testutil.RequireStatus(t, w, http.StatusOK)
 
-		w := helpers.TestRequestAsUser(r, "GET", "/v1/user", uuid, nil)
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+		var current userResponse
+		testutil.DecodeJSON(t, w, &current)
+		if current.Username != user.Username {
+			t.Errorf("current user: expected username %q, got %q", user.Username, current.Username)
+		}
+		if current.ID != user.ID {
+			t.Errorf("current user: expected ID %s, got %s", user.ID, current.ID)
 		}
 
-		var firstBody = w.Body.String()
+		w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+user.ID.String(), user.ID, nil)
+		testutil.RequireStatus(t, w, http.StatusOK)
 
-		var response UserWeb
-		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-			t.Errorf("Failed to unmarshal response: %v. Body: %s", err, w.Body.String())
+		var byID userResponse
+		testutil.DecodeJSON(t, w, &byID)
+		if byID.Username != user.Username {
+			t.Errorf("by-ID user: expected username %q, got %q", user.Username, byID.Username)
 		}
-
-		if errMsg := validateUserResponse(response, user); errMsg != "" {
-			t.Error("User response validation failed:", errMsg)
-		}
-
-		w = helpers.TestRequestAsUser(r, "GET", "/v1/user/"+uuid, uuid, nil)
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-		}
-
-		if w.Body.String() == firstBody {
-			t.Error("User accessing own data should be different than accessing via by uuid endpoint")
+		if byID.ID != user.ID {
+			t.Errorf("by-ID user: expected ID %s, got %s", user.ID, byID.ID)
 		}
 	}
 }
 
 func TestUserPatch(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	userRow := AllUsers[0]
-	uuid := userRow[0]
-	user := loadUser(0)
-	modified := UserWeb{
-		UserPost: UserPost{
-			Username: "MODIFIED " + user.Username,
-		},
-	}
-	user.Username = modified.Username
+	user := testutil.Users[0]
+	newName := "MODIFIED " + user.Username
 
-	bodyBytes, err := json.Marshal(modified)
-	if err != nil {
-		t.Fatalf("Failed to marshal testUserModel: %v", err)
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", user.ID,
+		testutil.JSONBody(t, map[string]string{"username": newName}))
+	testutil.RequireStatus(t, w, http.StatusOK)
 
-	w := helpers.TestRequestAsUser(r, "PATCH", "/v1/user", uuid, bodyReader)
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+	var response userResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.Username != newName {
+		t.Errorf("expected updated username %q, got %q", newName, response.Username)
 	}
 
-	var response UserWeb
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Errorf("Failed to unmarshal response: %v", err)
-	}
-
-	if errMsg := validateUserResponse(response, user); errMsg != "" {
-		t.Error("User response validation failed:", errMsg)
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user", user.ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+	testutil.DecodeJSON(t, w, &response)
+	if response.Username != newName {
+		t.Errorf("expected persisted username %q, got %q", newName, response.Username)
 	}
 }
 
+func TestUserPatchRejectsBadBody(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"username": 12}))
+	testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+}
+
 func TestUserReadPermissions(t *testing.T) {
-	r, _ := server.SetupTest(t)
+	env := testutil.SetupTest(t)
 
-	var successMatrix [8][8]string
+	for authIndex, accessRow := range testutil.UserAccessMatrix {
+		authUser := testutil.Users[authIndex]
+		for readIndex, permission := range accessRow {
+			readUser := testutil.Users[readIndex]
 
-	for authUser, access := range UserAccessMatrix {
-		for readUser, permission := range access {
-			authUUID := AllUsers[authUser][0]
-			readUUID := AllUsers[readUser][0]
-			expected := loadUser(readUser)
+			w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+readUser.ID.String(), authUser.ID, nil)
 
-			w := helpers.TestRequestAsUser(r, "GET", "/v1/user/"+readUUID, authUUID, nil)
-			if w.Code == http.StatusOK {
-				if permission == helpers.NO_ACCESS {
-					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusNotFound, w.Code)
+			switch {
+			case permission == testutil.NO_ACCESS:
+				if w.Code != http.StatusNotFound {
+					t.Errorf("%s reading %s: expected 404, got %d", authUser.Username, readUser.Username, w.Code)
+				}
+			default:
+				if w.Code != http.StatusOK {
+					t.Errorf("%s reading %s: expected 200, got %d", authUser.Username, readUser.Username, w.Code)
 					continue
 				}
-				var response UserWeb
-				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-					successMatrix[authUser][readUser] = fmt.Sprintf("Failed to unmarshal response: %v", err)
-					continue
+				var response userResponse
+				testutil.DecodeJSON(t, w, &response)
+				if response.Username != readUser.Username {
+					t.Errorf("%s reading %s: expected username %q, got %q", authUser.Username, readUser.Username, readUser.Username, response.Username)
 				}
-
-				if errMsg := validateUserResponse(response, expected); errMsg != "" {
-					successMatrix[authUser][readUser] = fmt.Sprintf("User response validation failed: %s", errMsg)
-					continue
-				}
-			} else if w.Code == http.StatusNotFound {
-				if permission > helpers.NO_ACCESS {
-					successMatrix[authUser][readUser] = fmt.Sprintf("Expected %d but got %d", http.StatusOK, w.Code)
-					continue
-				}
-			} else {
-				successMatrix[authUser][readUser] = fmt.Sprintf("Unexpected status code %d for %s reading %s", w.Code, authUUID, readUUID)
-				continue
 			}
 		}
 	}
+}
 
-	for authUser, access := range successMatrix {
-		for readUser, errorMessage := range access {
-			if errorMessage != "" {
-				authUserName := AllUsers[authUser][1]
-				readUserName := AllUsers[readUser][1]
-				t.Errorf("Auth User %s reading User %s: %s", authUserName, readUserName, errorMessage)
-			}
-		}
+func TestUserGetUnknownID(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	// A well-formed v7 UUID that is not seeded.
+	unknown := "019785fe-4eb4-766e-9c45-ffffffffffff"
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+unknown, testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+}
+
+func TestUserGetMalformedID(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/not-a-uuid", testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusBadRequest)
+}
+
+func TestUserVisibilityEndsWhenShareIsDeleted(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	// User 2 can read User 7 because User 7 has write access to Vehicle 2, which User 2 can read.
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User7ID.String(), testutil.User2ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	// Soft-delete User 7's share of Vehicle 2.
+	if err := env.DB.GetGorm().Table("vehicle_user_access").
+		Where("user_id = ? AND vehicle_id = ?", testutil.User7ID, testutil.Vehicle2ID).
+		Update("deleted_at", time.Now()).Error; err != nil {
+		t.Fatalf("soft-deleting access: %v", err)
 	}
+
+	// The vehicle they shared is no longer shared, so User 7 is hidden.
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User7ID.String(), testutil.User2ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+}
+
+func TestUserVisibilityEndsWhenVehicleIsDeleted(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	// User 1 (owner) and User 2 share Vehicle 2.
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User2ID.String(), testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	if err := env.DB.GetGorm().Table("vehicles").
+		Where("id = ?", testutil.Vehicle2ID).
+		Update("deleted_at", time.Now()).Error; err != nil {
+		t.Fatalf("soft-deleting vehicle: %v", err)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User2ID.String(), testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
 }

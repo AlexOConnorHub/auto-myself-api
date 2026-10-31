@@ -1,200 +1,117 @@
-package api
+package main
 
 import (
-	"auto-myself-api/internal/auth"
 	"auto-myself-api/internal/database"
-	"auto-myself-api/internal/maintenance"
-	"auto-myself-api/internal/middleware"
-	"auto-myself-api/internal/reports"
+	"auto-myself-api/internal/google"
 	"auto-myself-api/internal/secrets"
-	"auto-myself-api/internal/users"
-	"auto-myself-api/internal/vehicles"
+	"auto-myself-api/internal/server"
+	"auto-myself-api/internal/storage"
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
-	"github.com/gin-contrib/timeout"
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(ctx context.Context, r *gin.Engine) {
-	r.Use(gin.Recovery())
-	r.Use(middleware.Logger())
-	r.TrustedPlatform = gin.PlatformGoogleAppEngine
+var requiredSecrets = []string{
+	"DOMAIN",
+	"POSTGRES_DSN",
+	"GOOGLE_OAUTH2_CLIENT_ID",
+	"GOOGLE_OAUTH2_CLIENT_SECRET",
+	"JWT_SIGNING_SECRET",
+}
 
-	if gin.Mode() == gin.ReleaseMode {
-		r.Use(middleware.RateLimitMiddleware())
-		r.Use(timeout.New())
-	}
-
-	secretStore, err := secrets.SetupSecrets(ctx, []string{
-		"DOMAIN",
-		"KEYRING",
-		"POSTGRES_DSN",
-		"GOOGLE_OAUTH2_CLIENT_ID",
-		"GOOGLE_OAUTH2_CLIENT_SECRET",
-	})
+func Setup(ctx context.Context, r *gin.Engine) (func(), error) {
+	secretStore, err := secrets.SetupSecrets(ctx, requiredSecrets)
 	if err != nil {
-		panic("failed to setup secrets: " + err.Error())
+		return nil, fmt.Errorf("setting up secrets: %w", err)
 	}
 
-	sql, err := CreateSelfUpdatingDatabase(ctx, secretStore)
+	db, err := CreateSelfUpdatingDatabase(ctx, secretStore)
 	if err != nil {
-		panic("failed to create self-updating database: " + err.Error())
+		_ = secretStore.Close()
+		return nil, fmt.Errorf("connecting to database: %w", err)
 	}
 
-	tokenRepository := auth.NewTokenRepository(secretStore)
-	tokenService := auth.NewTokenService(tokenRepository)
+	bucketStorage := storage.NewGCS(google.GetBucketName())
 
-	authRepository := auth.NewAuthRepository(sql, secretStore)
-	authService := auth.NewAuthService(authRepository, tokenService)
-	authHandler := auth.NewAuthHandler(authService)
+	deps := server.Dependencies{
+		Database: db,
+		Secrets:  secretStore,
+		Storage:  bucketStorage,
+	}
+	server.RegisterRoutes(r, server.Build(deps), deps)
 
-	userRepository := users.NewUserRepository(sql)
-	userService := users.NewUserService(userRepository)
-	userHandler := users.NewUserHandler(userService)
-
-	vehicleRepository := vehicles.NewVehicleRepository(sql)
-	vehicleService := vehicles.NewVehicleService(vehicleRepository)
-	vehicleHandler := vehicles.NewVehicleHandler(vehicleService)
-
-	maintenanceRepository := maintenance.NewMaintenanceRepository(sql)
-	maintenanceService := maintenance.NewMaintenanceService(maintenanceRepository, vehicleRepository)
-	maintenanceHandler := maintenance.NewMaintenanceHandler(maintenanceService)
-
-	fileRepository := file.NewFileRepository(sql)
-	fileService := file.NewFileService(fileRepository)
-	fileHandler := file.NewFileHandler(fileService)
-
-	shareRepository := share.NewShareRepository(sql)
-	shareService := share.NewShareService(shareRepository)
-	shareHandler := share.NewShareHandler(shareService)
-
-	reportRepository := reports.NewRepository(sql)
-	reportService := reports.NewService(reportRepository)
-	reportHandler := reports.NewHandler(reportService)
-
-	authGroup := r.Group("/auth")
-	{
-		authGroup.GET("/web/:provider", authHandler.LoginWebInitiate)
-		authGroup.GET("/web/callback/:provider", authHandler.LoginWebCallback)
-		// auth.POST("/logout", )
-		// authGroup.POST("/exchange/:provider", WithApp(a, authGroup.LoginExchangeProvider))
-		authGroup.POST("/development", authHandler.LoginDevelopment)
-		authGroup.POST("/refresh", authHandler.RefreshToken)
+	shutdown := func() {
+		if err := bucketStorage.Close(); err != nil {
+			slog.Error("failed to close storage client", "error", err)
+		}
+		if err := secretStore.Close(); err != nil {
+			slog.Error("failed to close secret store", "error", err)
+		}
+		if err := db.Close(); err != nil {
+			slog.Error("failed to close database", "error", err)
+		}
 	}
 
-	v1 := r.Group("/v1")
-	v1.Use(middleware.AuthMiddleware(secretStore, sql))
-	v1.Use(middleware.ParseUUIDMiddleware())
-	{
-		uuidPath := "/:uuid"
-		userGroup := v1.Group("/user")
-		{
-			userGroup.GET("", userHandler.GetCurrentUser)
-			userGroup.PATCH("", userHandler.UpdateUser)
-			// user.DELETE("", WithApp(a, DeleteCurrentUser))
-			uuidGroup := userGroup.Group(uuidPath)
-			{
-
-				uuidGroup.GET("", userHandler.GetUserByID)
-			}
-		}
-
-		vehicleGroup := v1.Group("/vehicle")
-		{
-			vehicleGroup.GET("", vehicleHandler.FindIDs)
-			vehicleGroup.POST("", vehicleHandler.Create)
-			uuidGroup := vehicleGroup.Group(uuidPath)
-			{
-				uuidGroup.GET("", vehicleHandler.FindByID)
-				uuidGroup.PATCH("", vehicleHandler.UpdateByID)
-				uuidGroup.DELETE("", vehicleHandler.DeleteByID)
-				uuidGroup.GET("/maintenance", maintenanceHandler.FindIDs)
-			}
-		}
-
-		maintenanceGroup := v1.Group("/maintenance")
-		{
-			maintenanceGroup.POST("", maintenanceHandler.Create)
-			uuidGroup := maintenanceGroup.Group(uuidPath)
-			{
-				uuidGroup.GET("", maintenanceHandler.FindByID)
-				uuidGroup.PATCH("", maintenanceHandler.UpdateByID)
-				uuidGroup.DELETE("", maintenanceHandler.DeleteByID)
-			}
-		}
-
-		fileGroup := v1.Group("/file")
-		{
-			recordInfo := fileGroup.Group("/:record_type/:uuid")
-			{
-				recordInfo.GET("", fileHandler.GetFilesForTypeByID)
-				recordInfo.POST("", fileHandler.CreateFileForTypeByID)
-			}
-			uuidGroup := fileGroup.Group(uuidPath)
-			{
-				uuidGroup.DELETE("", fileHandler.DeleteFileByID)
-			}
-		}
-
-		shareGroup := v1.Group("/share")
-		{
-			shareGroup.GET("", shareHandler.GetAllShares)
-			shareGroup.POST("", shareHandler.CreateShare)
-			uuidGroup := shareGroup.Group(uuidPath)
-			{
-				uuidGroup.GET("", shareHandler.GetShareByID)
-				uuidGroup.PATCH("", shareHandler.AcceptShare)
-				uuidGroup.DELETE("", shareHandler.DeleteShareByID)
-			}
-		}
-
-		reportGroup := v1.Group("/report")
-		{
-			reportGroup.POST("", reportHandler.Create)
-			reportGroup.GET("", reportHandler.List)
-			reportGroup.POST("/by-date", reportHandler.ListByDate)
-			uuidGroup := reportGroup.Group(uuidPath)
-			{
-				uuidGroup.GET("", reportHandler.FindByID)
-				uuidGroup.PATCH("", reportHandler.UpdateByID)
-			}
-		}
-	}
+	return shutdown, nil
 }
 
 func CreateSelfUpdatingDatabase(ctx context.Context, s *secrets.SecretStore) (*database.Database, error) {
-	DSN_SECRET := "POSTGRES_DSN"
+	const dsnSecret = "POSTGRES_DSN"
 
-	db, err := database.ConnectPostgres(ctx, s.Get(DSN_SECRET).Value)
+	dsn, err := s.Get(dsnSecret)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
+		return nil, fmt.Errorf("reading %s: %w", dsnSecret, err)
 	}
 
-	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	sql, err := database.NewDatabase(db)
+	db, err := database.ConnectPostgres(ctx, dsn.Value)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create database wrapper: %w", err)
+		return nil, fmt.Errorf("connecting to postgres: %w", err)
 	}
 
-	s.Watch(DSN_SECRET, func(value secrets.SecretValue) {
-		newDB, err := database.ConnectPostgres(ctx, value.Value)
-		if err != nil {
-			panic(err)
-		}
+	wrapper, err := database.NewDatabase(db)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("creating database wrapper: %w", err)
+	}
 
-		if err := newDB.PingContext(ctx); err != nil {
-			panic(err)
-		}
-
-		_, err = sql.Replace(newDB)
-		if err != nil {
-			panic(err)
-		}
+	s.Watch(dsnSecret, func(value secrets.SecretValue) {
+		reconnectWithRetry(ctx, wrapper, value.Value)
 	})
 
-	return sql, nil
+	return wrapper, nil
+}
+
+// Swaps in a fresh connection after the DSN rotates.
+func reconnectWithRetry(ctx context.Context, wrapper *database.Database, dsn string) {
+	const attempts = 5
+	backoff := time.Second
+
+	for attempt := 1; attempt <= attempts; attempt++ {
+		newDB, err := database.ConnectPostgres(ctx, dsn)
+		if err == nil {
+			oldDB, replaceErr := wrapper.Replace(newDB)
+			if replaceErr != nil {
+				_ = newDB.Close()
+				slog.Error("failed to swap in rotated database connection", "error", replaceErr)
+				return
+			}
+			if oldDB != nil {
+				if closeErr := oldDB.Close(); closeErr != nil {
+					slog.Error("failed to close replaced database connection", "error", closeErr)
+				}
+			}
+			return
+		}
+
+		slog.Error("failed to reconnect after DSN rotation", "attempt", attempt, "error", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
 }

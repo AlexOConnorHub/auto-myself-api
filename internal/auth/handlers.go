@@ -1,62 +1,68 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type AuthHandler interface {
-	LoginWebProvider(c *gin.Context)
+	LoginWebInitiate(c *gin.Context)
 	LoginWebCallback(c *gin.Context)
 	RefreshToken(c *gin.Context)
 	LoginDevelopment(c *gin.Context)
 }
 
-type authHandler struct {
-	authService *authService
+type Handler struct {
+	authService *Service
 }
 
-func NewAuthHandler(authService *authService) *authHandler {
-	return &authHandler{
+func NewAuthHandler(authService *Service) *Handler {
+	return &Handler{
 		authService: authService,
 	}
 }
 
-func (h *authHandler) LoginWebInitiate(c *gin.Context) {
+func (h *Handler) LoginWebInitiate(c *gin.Context) {
+	ctx := c.Request.Context()
 	provider := c.Param("provider")
 
-	url, err := h.authService.LoginWebInitiate(c, provider)
+	url, err := h.authService.LoginWebInitiate(ctx, provider)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
+		if errors.Is(err, ErrUnsupportedProvider) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
+			return
+		}
+		slog.Get(c).ErrorContext(ctx, "failed to start oauth login", "provider", provider, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (h *authHandler) LoginWebCallback(c *gin.Context) {
+func (h *Handler) LoginWebCallback(c *gin.Context) {
 	ctx := c.Request.Context()
 	provider := c.Param("provider")
 
 	code := c.Query("code")
 	if code == "" {
-		slog.Get(c).ErrorContext(ctx, "authHandler.LoginWebCallback: code not found in query parameters (Google requirements)")
+		slog.Get(c).WarnContext(ctx, "oauth callback missing code", "provider", provider)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
 	userAuth, err := h.authService.LoginWebCallback(ctx, provider, code)
-
 	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "authHandler.LoginWebCallback: ", err)
+		if errors.Is(err, ErrUnsupportedProvider) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
+			return
+		}
+		slog.Get(c).ErrorContext(ctx, "oauth callback failed", "provider", provider, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-
-	if userAuth.JWT == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
@@ -66,34 +72,34 @@ func (h *authHandler) LoginWebCallback(c *gin.Context) {
 	})
 }
 
-func (h *authHandler) RefreshToken(c *gin.Context) {
+func (h *Handler) RefreshToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var userProvidedToken RefreshTokenRequest
-	if err := c.ShouldBindJSON(&userProvidedToken); err != nil {
-		slog.Get(c).WarnContext(ctx, "authHandler.RefreshToken: Failed to bind JSON", "error", err)
+	var request RefreshTokenRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid refresh token body", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	userAuth, err := h.authService.RefreshToken(ctx, userProvidedToken)
-	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "authHandler.RefreshToken: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+	userAuth, err := h.authService.RefreshToken(ctx, request)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, ErrInvalidRefreshToken):
+		slog.Get(c).WarnContext(ctx, "invalid or expired refresh token")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
-	}
-
-	if userAuth.JWT == "" {
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to refresh token", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"jwt": userAuth.JWT, "refresh": userAuth.Refresh})
-	return
 }
 
-// DEVELOPMENT ONLY Login
-func (h *authHandler) LoginDevelopment(c *gin.Context) {
+// LoginDevelopment is a development-only helper.
+func (h *Handler) LoginDevelopment(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if gin.Mode() != gin.DebugMode && gin.Mode() != gin.TestMode {
@@ -101,23 +107,23 @@ func (h *authHandler) LoginDevelopment(c *gin.Context) {
 		return
 	}
 
-	var developmentLoginRequest DevelopmentLoginRequest
-	if err := c.ShouldBindJSON(&developmentLoginRequest); err != nil {
-		slog.Get(c).WarnContext(ctx, "authHandler.LoginDevelopment: Failed to bind JSON", "error", err)
+	var request DevelopmentLoginRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid development login body", "error", err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	userAuth, err := h.authService.DevelopmentLogin(ctx, developmentLoginRequest)
-
-	if err != nil {
-		slog.Get(c).ErrorContext(ctx, "authHandler.LoginDevelopment: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-
-	if userAuth.JWT == "" {
+	userAuth, err := h.authService.DevelopmentLogin(ctx, request)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "development user not found", "user_id", request.UserID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "development login failed", "user_id", request.UserID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 

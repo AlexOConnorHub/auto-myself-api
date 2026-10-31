@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	gorm_postgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -25,6 +26,10 @@ func NewDatabase(db *sql.DB) (*Database, error) {
 		gorm: gormDB,
 		db:   db,
 	}, nil
+}
+
+func NewDatabaseFromGorm(gormDB *gorm.DB) *Database {
+	return &Database{gorm: gormDB}
 }
 
 func (d *Database) GetDB() *sql.DB {
@@ -56,19 +61,26 @@ func (d *Database) Replace(newDB *sql.DB) (*sql.DB, error) {
 	return oldDB, nil
 }
 
-func (d *Database) SecretChange()
+func (d *Database) Close() error {
+	d.mu.RLock()
+	db := d.db
+	d.mu.RUnlock()
+	if db == nil {
+		return nil
+	}
+	return db.Close()
+}
 
 func ConnectPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Ping(); err != nil {
-		err_2 := db.Close()
-		if err_2 != nil {
-			return nil, fmt.Errorf("ping failed: %v, close failed: %v", err, err_2)
+	if err := db.PingContext(ctx); err != nil {
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, fmt.Errorf("pinging postgres: %w (close failed: %v)", err, closeErr)
 		}
-		return nil, err
+		return nil, fmt.Errorf("pinging postgres: %w", err)
 	}
 	return db, nil
 }
@@ -76,8 +88,7 @@ func ConnectPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
 func ConnectGormPostgres(db *sql.DB) (*gorm.DB, error) {
 	gormDB, err := gorm.Open(gorm_postgres.New(gorm_postgres.Config{
 		Conn: db,
-	}), &gorm.Config{})
-
+	}), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, err
 	}

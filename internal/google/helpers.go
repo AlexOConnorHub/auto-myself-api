@@ -1,161 +1,90 @@
 package google
 
 import (
-	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"time"
+	"sync"
 
-	"cloud.google.com/go/storage"
 	_ "github.com/joho/godotenv/autoload"
 )
 
-// var secrets = map[string]string{}
-var gProjectID string
-var gProjectNumericID string
+var (
+	projectMu         sync.Mutex
+	gProjectID        string
+	gProjectNumericID string
+)
+
+func metadataValue(path string) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, "http://metadata.google.internal/computeMetadata/v1/"+path, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("metadata server returned %s for %s", resp.Status, path)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
 
 func GetProjectID() string {
+	projectMu.Lock()
+	defer projectMu.Unlock()
+
 	if gProjectID != "" {
 		return gProjectID
 	}
 
-	envProjectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
-	if envProjectID != "" {
+	if envProjectID := os.Getenv("GOOGLE_CLOUD_PROJECT"); envProjectID != "" {
 		gProjectID = envProjectID
 		return gProjectID
 	}
 
-	data, err := http.Get("http://metadata.google.internal/computeMetadata/v1/project/project-id")
+	value, err := metadataValue("project/project-id")
 	if err != nil {
-		panic("Failed to determine Google Cloud project ID from metadata server")
+		panic("failed to determine Google Cloud project ID: " + err.Error())
 	}
-
-	defer data.Body.Close()
-	body, err := io.ReadAll(data.Body)
-	if err != nil {
-		panic("Failed to read response from metadata server: " + err.Error())
-	}
-
-	gProjectID = string(body)
+	gProjectID = value
 	return gProjectID
 }
 
 func GetNumericProjectID() string {
+	projectMu.Lock()
+	defer projectMu.Unlock()
+
 	if gProjectNumericID != "" {
 		return gProjectNumericID
 	}
 
-	envProjectNumericID := os.Getenv("GOOGLE_CLOUD_PROJECT_NUMERIC")
-	if envProjectNumericID != "" {
-		gProjectNumericID = envProjectNumericID
+	if envID := os.Getenv("GOOGLE_CLOUD_PROJECT_NUMERIC"); envID != "" {
+		gProjectNumericID = envID
 		return gProjectNumericID
 	}
 
-	data, err := http.Get("http://metadata.google.internal/computeMetadata/v1/project/numeric-project-id")
+	value, err := metadataValue("project/numeric-project-id")
 	if err != nil {
-		panic("Failed to determine Google Cloud project numeric ID from metadata server")
+		panic("failed to determine Google Cloud numeric project ID: " + err.Error())
 	}
-
-	defer data.Body.Close()
-	body, err := io.ReadAll(data.Body)
-	if err != nil {
-		panic("Failed to read response from metadata server: " + err.Error())
-	}
-
-	gProjectNumericID = string(body)
+	gProjectNumericID = value
 	return gProjectNumericID
 }
 
-// func GetSecret(name string) string {
-// 	secret, exists := secrets[name]
-// 	if exists {
-// 		return secret
-// 	}
-
-// 	secret = os.Getenv(name)
-// 	if secret != "" {
-// 		secrets[name] = secret
-// 		return secret
-// 	}
-
-// 	client, err := secretmanager.NewClient(ctx)
-// 	if err != nil {
-// 		panic("failed to create Google Cloud Secret Manager client: " + err.Error())
-// 	}
-// 	defer client.Close()
-
-// 	projectID := getNumericProjectID()
-
-// 	result, err := client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
-// 		Name: fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, name),
-// 	})
-// 	client.Close()
-// 	if err != nil {
-// 		panic("failed to locate secret " + name + ": " + err.Error())
-// projectID := GetNumericProjectID()
-
-// 	crc32c := crc32.MakeTable(crc32.Castagnoli)
-// 	checksum := int64(crc32.Checksum(result.Payload.Data, crc32c))
-// 	if checksum != *result.Payload.DataCrc32C {
-// 		panic("Data corruption detected.")
-// 	}
-
-// 	secrets[name] = string(result.Payload.Data)
-// 	return secrets[name]
-// }
-
-func getBucketName() string {
-	projectID := GetProjectID()
-	return "staging." + projectID + ".appspot.com"
-}
-
-func GetFileUrl(ctx context.Context, filePath string) (string, error) {
-	bucketName := getBucketName()
-
-	client, err := storage.NewClient(ctx)
-	if err != nil {
-		return "", err
+func GetBucketName() string {
+	if bucket := os.Getenv("STORAGE_BUCKET"); bucket != "" {
+		return bucket
 	}
-	defer client.Close()
-
-	bucket := client.Bucket(bucketName)
-	expirationTime := time.Now().Add(15 * time.Minute)
-	if url, err := bucket.SignedURL(filePath, &storage.SignedURLOptions{
-		Expires: expirationTime,
-		Method:  "GET",
-	}); err != nil {
-		return "", err
-	} else {
-		return url, nil
-	}
-}
-
-func DeleteFile(ctx context.Context, filePath string) error {
-	bucketName := getBucketName()
-
-	client, err := storage.NewClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	return client.Bucket(bucketName).Object(filePath).Delete(ctx)
-}
-
-func CreateFile(ctx context.Context, filePath string, data *[]byte) error {
-	bucketName := getBucketName()
-	println("Creating file at path: " + filePath + " in bucket: " + bucketName)
-
-	client, err := storage.NewClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	wc := client.Bucket(bucketName).Object(filePath).NewWriter(ctx)
-	if _, err := wc.Write(*data); err != nil {
-		return err
-	}
-	return wc.Close()
+	return "staging." + GetProjectID() + ".appspot.com"
 }

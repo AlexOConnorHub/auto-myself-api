@@ -1,85 +1,141 @@
 package secrets
 
 import (
-	"auto-myself-api/internal/google"
-	"auto-myself-api/internal/messages"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	pubsub "cloud.google.com/go/pubsub/v2"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
+
+	"auto-myself-api/internal/google"
+	"auto-myself-api/internal/messages"
 )
+
+var ErrSecretNotFound = errors.New("secret not found")
 
 type SecretValue struct {
 	Value       string
 	RetrievedAt time.Time
 }
 
-type SecretWatcher struct {
-	ID      *int64
-	Handler func(SecretValue)
-}
-
 type SecretStore struct {
 	secrets            map[string]*atomic.Pointer[SecretValue]
-	watchers           map[string][]SecretWatcher
+	watchers           map[string]map[int64]func(SecretValue)
 	watchersMu         sync.Mutex
-	watcherIdGenerator atomic.Int64
+	watcherIDGenerator atomic.Int64
 	clientSecret       *secretmanager.Client
-	clientSub          *pubsub.Client
-	ctx                context.Context
 }
 
-func SetupSecrets(ctx context.Context, secrets []string) (*SecretStore, error) {
+func newSecretStore() *SecretStore {
+	return &SecretStore{
+		secrets:  make(map[string]*atomic.Pointer[SecretValue]),
+		watchers: make(map[string]map[int64]func(SecretValue)),
+	}
+}
 
-	// Debug mode: do not connect to Google Secret Manager
-	if gin.Mode() == gin.DebugMode {
-		return nil, nil
+func NewEnvStore(required []string) (*SecretStore, error) {
+	store := newSecretStore()
+	for _, name := range required {
+		value := os.Getenv(name)
+		if value == "" {
+			return nil, fmt.Errorf("required environment secret %s: %w", name, ErrSecretNotFound)
+		}
+		store.set(name, value)
+	}
+	return store, nil
+}
+
+func SetupSecrets(ctx context.Context, required []string) (*SecretStore, error) {
+	if gin.Mode() == gin.DebugMode || gin.Mode() == gin.TestMode {
+		return NewEnvStore(required)
 	}
 
-	var s SecretStore = SecretStore{
-		ctx:        ctx,
-		secrets:    make(map[string]*atomic.Pointer[SecretValue]),
-		watchers:   make(map[string][]SecretWatcher),
-		watchersMu: sync.Mutex{},
-	}
+	store := newSecretStore()
 
-	var err error
-	s.clientSecret, err = secretmanager.NewClient(s.ctx)
+	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating secret manager client: %w", err)
 	}
+	store.clientSecret = client
 
-	for _, secret := range secrets {
-		value, err := s.retrieveSecret(s.ctx, secret)
+	for _, name := range required {
+		value, err := store.retrieveSecret(ctx, name)
 		if err != nil {
-			return nil, err
+			_ = client.Close()
+			return nil, fmt.Errorf("retrieving secret %s: %w", name, err)
 		}
-
-		secretObj := &SecretValue{
-			Value:       value,
-			RetrievedAt: time.Now(),
-		}
-		s.secrets[secret] = &atomic.Pointer[SecretValue]{}
-		s.secrets[secret].Store(secretObj)
+		store.set(name, value)
 	}
 
-	err = messages.SubscribeUpdatesChannel(s.ctx, "API_SECRET_CHANGE", s.listener)
+	go store.subscribeLoop(ctx)
 
+	return store, nil
+}
+
+func (s *SecretStore) set(name, value string) {
+	valuePtr := &atomic.Pointer[SecretValue]{}
+	valuePtr.Store(&SecretValue{Value: value, RetrievedAt: time.Now()})
+	s.secrets[name] = valuePtr
+}
+
+func (s *SecretStore) Get(name string) (*SecretValue, error) {
+	if value := os.Getenv(name); value != "" {
+		return &SecretValue{Value: value, RetrievedAt: time.Now()}, nil
+	}
+	ptr, exists := s.secrets[name]
+	if !exists {
+		return nil, fmt.Errorf("secret %s: %w", name, ErrSecretNotFound)
+	}
+	value := ptr.Load()
+	if value == nil {
+		return nil, fmt.Errorf("secret %s: %w", name, ErrSecretNotFound)
+	}
+	return value, nil
+}
+
+func (s *SecretStore) MustGet(name string) *SecretValue {
+	value, err := s.Get(name)
 	if err != nil {
 		panic(err)
 	}
+	return value
+}
 
-	return &s, nil
+func (s *SecretStore) Watch(name string, handler func(SecretValue)) (cancel func()) {
+	id := s.watcherIDGenerator.Add(1)
+
+	s.watchersMu.Lock()
+	if s.watchers[name] == nil {
+		s.watchers[name] = make(map[int64]func(SecretValue))
+	}
+	s.watchers[name][id] = handler
+	s.watchersMu.Unlock()
+
+	return func() {
+		s.watchersMu.Lock()
+		defer s.watchersMu.Unlock()
+		delete(s.watchers[name], id)
+		if len(s.watchers[name]) == 0 {
+			delete(s.watchers, name)
+		}
+	}
+}
+
+func (s *SecretStore) Close() error {
+	if s.clientSecret == nil {
+		return nil
+	}
+	return s.clientSecret.Close()
 }
 
 type GoogleSecretUpdate struct {
@@ -92,76 +148,70 @@ type GoogleSecretUpdate struct {
 func (s *SecretStore) listener(ctx context.Context, msg messages.UpdateMessage) error {
 	var update GoogleSecretUpdate
 	if err := json.Unmarshal(msg.Data, &update); err != nil {
-		return err
+		return fmt.Errorf("decoding secret update: %w", err)
 	}
 
-	if strings.Count(update.SecretId, "/") != 3 {
-		return fmt.Errorf("Secret ID %s is not in format `projects/{project}/secrets/{secret}`", update.SecretId)
+	parts := strings.Split(update.SecretId, "/")
+	if len(parts) != 4 {
+		return fmt.Errorf("secret ID %s is not in format `projects/{project}/secrets/{secret}`", update.SecretId)
 	}
+	secretName := parts[3]
 
-	secretFullnameParts := strings.Split(update.SecretId, "/")
-	secretName := secretFullnameParts[3]
-
-	if ptr, exists := s.secrets[secretName]; exists {
-		value, err := s.retrieveSecret(ctx, secretName)
-		if err != nil {
-			panic(err)
-		}
-		secretObj := &SecretValue{
-			Value:       value,
-			RetrievedAt: time.Now(),
-		}
-		ptr.Store(secretObj)
-		// Notify watchers
-		s.watchersMu.Lock()
-		for _, w := range s.watchers[secretName] {
-			go w.Handler(*secretObj)
-		}
-		s.watchersMu.Unlock()
-	}
-	return nil
-}
-
-func (s *SecretStore) Get(name string) *SecretValue {
-	osEnv := os.Getenv(name)
-	if osEnv != "" {
-		return &SecretValue{Value: osEnv, RetrievedAt: time.Now()}
-	}
-	ptr, exists := s.secrets[name]
+	valuePtr, exists := s.secrets[secretName]
 	if !exists {
 		return nil
 	}
-	secret := ptr.Load()
-	if secret == nil {
-		return nil
-	}
-	return secret
-}
 
-func (s *SecretStore) Watch(name string, handler func(SecretValue)) (cancel func()) {
-	id := s.watcherIdGenerator.Add(1)
-	w := SecretWatcher{
-		ID:      &id,
-		Handler: handler,
+	value, err := s.retrieveSecret(ctx, secretName)
+	if err != nil {
+		return fmt.Errorf("retrieving rotated secret %s: %w", secretName, err)
 	}
+
+	rotated := SecretValue{Value: value, RetrievedAt: time.Now()}
+	valuePtr.Store(&rotated)
+
 	s.watchersMu.Lock()
-	s.watchers[name] = append(s.watchers[name], w)
+	handlers := make([]func(SecretValue), 0, len(s.watchers[secretName]))
+	for _, handler := range s.watchers[secretName] {
+		handlers = append(handlers, handler)
+	}
 	s.watchersMu.Unlock()
 
-	return func() {
-		s.watchersMu.Lock()
-		defer s.watchersMu.Unlock()
-		watchers := s.watchers[name]
-		for i, w := range watchers {
-			if w.ID == &id {
-				s.watchers[name] = append(watchers[:i], watchers[i+1:]...)
-				break
-			}
+	for _, handler := range handlers {
+		go handler(rotated)
+	}
+
+	return nil
+}
+
+func (s *SecretStore) subscribeLoop(ctx context.Context) {
+	backoff := time.Second
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		err := messages.SubscribeUpdatesChannel(ctx, "API_SECRET_CHANGE", s.listener)
+		if ctx.Err() != nil {
+			return
+		}
+		slog.Error("secret update subscription stopped; retrying", "error", err, "retry_in", backoff)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < time.Minute {
+			backoff *= 2
 		}
 	}
 }
 
 func (s *SecretStore) retrieveSecret(ctx context.Context, name string) (string, error) {
+	if s.clientSecret == nil {
+		return "", fmt.Errorf("secret %s: %w", name, ErrSecretNotFound)
+	}
 	projectID := google.GetNumericProjectID()
 	result, err := s.clientSecret.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
 		Name: fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, name),
