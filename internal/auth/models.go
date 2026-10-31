@@ -53,14 +53,10 @@ func (r *RefreshToken) BeforeCreate(tx *gorm.DB) (err error) {
 	return helpers.BeforeCreateID(tx, r)
 }
 
-type googleUserInfo struct {
-	Sub           string `json:"sub"`
-	Name          string `json:"name"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	Picture       string `json:"picture"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
+type MobileLoginRequest struct {
+	IDToken string `json:"id_token" binding:"required,max=8192"`
+	Nonce   string `json:"nonce" binding:"required,max=512"`
+	Name    string `json:"name" binding:"omitempty,max=255"`
 }
 
 type RefreshTokenRequest struct {

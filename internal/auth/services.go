@@ -14,8 +14,6 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"gorm.io/gorm"
 )
 
@@ -34,58 +32,112 @@ const (
 )
 
 type AuthService interface {
-	LoginWebInitiate(context.Context, string) (string, error)
-	LoginWebCallback(context.Context, string, string) (*UserAuthResponse, error)
+	LoginMobile(context.Context, string, MobileLoginRequest) (*UserAuthResponse, error)
 	RefreshToken(context.Context, RefreshTokenRequest) (*UserAuthResponse, error)
 	DevelopmentLogin(context.Context, DevelopmentLoginRequest) (*UserAuthResponse, error)
 }
 
 type Service struct {
-	authRepository  *Repository
-	tokenService    *TokenService
-	oauthRepository OAuthRepository
-	secrets         *secrets.SecretStore
+	authRepository *Repository
+	tokenService   *TokenService
+	verifiers      IdentityVerifiers
 }
 
-func NewAuthService(
-	authRepository *Repository,
-	tokenService *TokenService,
-	oauthRepository OAuthRepository,
-	secretStore *secrets.SecretStore,
-) *Service {
+func NewAuthService(authRepository *Repository, tokenService *TokenService, verifiers IdentityVerifiers) *Service {
 	return &Service{
-		authRepository:  authRepository,
-		tokenService:    tokenService,
-		oauthRepository: oauthRepository,
-		secrets:         secretStore,
+		authRepository: authRepository,
+		tokenService:   tokenService,
+		verifiers:      verifiers,
 	}
 }
 
-// placeholderOAuthState keeps the provider round trip conventional. These web endpoints do not
-// bind state to a browser session; they are a stepping stone to the mobile PKCE flow, which will
-// add proper state/verifier binding.
-const placeholderOAuthState = "state"
+func IsSupportedMobileProvider(provider string) bool {
+	return provider == ProviderGoogle || provider == ProviderApple
+}
 
-func (s *Service) LoginWebInitiate(ctx context.Context, provider string) (string, error) {
-	if provider != "google" {
-		return "", ErrUnsupportedProvider
-	}
-
-	conf, err := s.oauthConfig()
+func (s *Service) LoginMobile(ctx context.Context, provider string, request MobileLoginRequest) (*UserAuthResponse, error) {
+	verifier, requestedName, err := s.verifierFor(provider, request.Name)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return s.oauthRepository.AuthCodeURL(conf, placeholderOAuthState), nil
+	identity, err := verifier.Verify(ctx, request.IDToken, request.Nonce)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil || identity.Provider != provider || identity.Subject == "" {
+		return nil, ErrInvalidIdentityToken
+	}
+
+	return s.loginWithVerifiedIdentity(ctx, provider, identity, requestedName)
 }
 
-func (s *Service) LoginWebCallback(ctx context.Context, provider string, code string) (*UserAuthResponse, error) {
+func (s *Service) verifierFor(provider, requestedName string) (IdentityTokenVerifier, string, error) {
 	switch provider {
-	case "google":
-		return s.googleWebCallback(ctx, code)
+	case ProviderGoogle:
+		if s.verifiers.Google == nil {
+			return nil, "", errors.New("google identity verifier is not configured")
+		}
+		return s.verifiers.Google, "", nil
+	case ProviderApple:
+		if s.verifiers.Apple == nil {
+			return nil, "", errors.New("apple identity verifier is not configured")
+		}
+		return s.verifiers.Apple, requestedName, nil
 	default:
-		return nil, ErrUnsupportedProvider
+		return nil, "", ErrUnsupportedProvider
 	}
+}
+
+func (s *Service) loginWithVerifiedIdentity(ctx context.Context, provider string, identity *VerifiedIdentity, requestedName string) (*UserAuthResponse, error) {
+	user, err := s.authRepository.FindUserByProviderAndSubject(ctx, provider, identity.Subject)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("finding user for %s identity: %w", provider, err)
+		}
+
+		user = &users.User{
+			UserWeb: users.UserWeb{
+				UserPost: users.UserPost{Username: usernameForIdentity(identity, requestedName)},
+			},
+		}
+		newIdentity := &Identity{
+			IdentityBase: IdentityBase{
+				Provider: provider,
+				Subject:  identity.Subject,
+				Email:    identity.Email,
+			},
+		}
+
+		if createErr := s.authRepository.CreateUserWithIdentity(ctx, user, newIdentity); createErr != nil {
+			if !errors.Is(createErr, gorm.ErrDuplicatedKey) {
+				return nil, fmt.Errorf("creating user for %s identity: %w", provider, createErr)
+			}
+
+			existing, findErr := s.authRepository.FindUserByProviderAndSubject(ctx, provider, identity.Subject)
+			if findErr != nil {
+				return nil, fmt.Errorf("creating user for %s identity: %w", provider, createErr)
+			}
+			user = existing
+		}
+	}
+
+	return s.userToUserAuthResponse(ctx, user)
+}
+
+func usernameForIdentity(identity *VerifiedIdentity, requestedName string) string {
+	if name := strings.TrimSpace(identity.Name); name != "" {
+		return name
+	}
+	if name := strings.TrimSpace(requestedName); name != "" {
+		return name
+	}
+	if at := strings.IndexByte(identity.Email, '@'); at > 0 {
+		if local := strings.TrimSpace(identity.Email[:at]); local != "" {
+			return local
+		}
+	}
+	return "User"
 }
 
 func (s *Service) RefreshToken(ctx context.Context, request RefreshTokenRequest) (*UserAuthResponse, error) {
@@ -117,71 +169,6 @@ func (s *Service) DevelopmentLogin(ctx context.Context, request DevelopmentLogin
 			return nil, err
 		}
 		return nil, fmt.Errorf("finding development user %s: %w", userID, err)
-	}
-
-	return s.userToUserAuthResponse(ctx, user)
-}
-
-func (s *Service) oauthConfig() (*oauth2.Config, error) {
-	clientID, err := s.secrets.Get("GOOGLE_OAUTH2_CLIENT_ID")
-	if err != nil {
-		return nil, fmt.Errorf("reading GOOGLE_OAUTH2_CLIENT_ID: %w", err)
-	}
-	clientSecret, err := s.secrets.Get("GOOGLE_OAUTH2_CLIENT_SECRET")
-	if err != nil {
-		return nil, fmt.Errorf("reading GOOGLE_OAUTH2_CLIENT_SECRET: %w", err)
-	}
-	domain, err := s.secrets.Get("DOMAIN")
-	if err != nil {
-		return nil, fmt.Errorf("reading DOMAIN: %w", err)
-	}
-
-	return &oauth2.Config{
-		ClientID:     clientID.Value,
-		ClientSecret: clientSecret.Value,
-		RedirectURL:  strings.TrimSuffix(domain.Value, "/") + "/auth/web/callback/google",
-		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/userinfo.profile",
-			"openid",
-		},
-		Endpoint: google.Endpoint,
-	}, nil
-}
-
-func (s *Service) googleWebCallback(ctx context.Context, code string) (*UserAuthResponse, error) {
-	conf, err := s.oauthConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	googleData, err := s.oauthRepository.ExchangeUserInfo(ctx, conf, code)
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := s.authRepository.FindUserByProviderAndSubject(ctx, "google", googleData.Sub)
-	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("finding user for google subject %s: %w", googleData.Sub, err)
-		}
-
-		user = &users.User{
-			UserWeb: users.UserWeb{
-				UserPost: users.UserPost{Username: googleData.Name},
-			},
-		}
-		identity := &Identity{
-			IdentityBase: IdentityBase{
-				Provider: "google",
-				Subject:  googleData.Sub,
-				Email:    googleData.Email,
-			},
-		}
-
-		if err := s.authRepository.CreateUserWithIdentity(ctx, user, identity); err != nil {
-			return nil, fmt.Errorf("creating user for google subject %s: %w", googleData.Sub, err)
-		}
 	}
 
 	return s.userToUserAuthResponse(ctx, user)

@@ -5,15 +5,10 @@ import (
 	"auto-myself-api/internal/helpers"
 	"auto-myself-api/internal/users"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 )
 
@@ -122,48 +117,3 @@ func (r *Repository) RotateRefreshToken(ctx context.Context, tokenID uuid.UUID, 
 
 // compile-time assertion that the concrete repository satisfies its interface.
 var _ AuthRepository = (*Repository)(nil)
-
-type OAuthRepository interface {
-	AuthCodeURL(conf *oauth2.Config, state string) string
-	ExchangeUserInfo(context.Context, *oauth2.Config, string) (*googleUserInfo, error)
-}
-
-type GoogleOAuthRepository struct{}
-
-func NewGoogleOAuthRepository() *GoogleOAuthRepository {
-	return &GoogleOAuthRepository{}
-}
-
-func (r *GoogleOAuthRepository) AuthCodeURL(conf *oauth2.Config, state string) string {
-	return conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
-}
-
-func (r *GoogleOAuthRepository) ExchangeUserInfo(ctx context.Context, conf *oauth2.Config, code string) (*googleUserInfo, error) {
-	token, err := conf.Exchange(ctx, code)
-	if err != nil {
-		return nil, fmt.Errorf("exchanging oauth code: %w", err)
-	}
-
-	response, err := conf.Client(ctx, token).Get("https://www.googleapis.com/oauth2/v3/userinfo")
-	if err != nil {
-		return nil, fmt.Errorf("fetching google user info: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("google user info returned %s", response.Status)
-	}
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading google user info: %w", err)
-	}
-
-	var info googleUserInfo
-	if err := json.Unmarshal(body, &info); err != nil {
-		return nil, fmt.Errorf("decoding google user info: %w", err)
-	}
-	return &info, nil
-}
-
-var _ OAuthRepository = (*GoogleOAuthRepository)(nil)

@@ -10,8 +10,7 @@ import (
 )
 
 type AuthHandler interface {
-	LoginWebInitiate(c *gin.Context)
-	LoginWebCallback(c *gin.Context)
+	LoginMobile(c *gin.Context)
 	RefreshToken(c *gin.Context)
 	LoginDevelopment(c *gin.Context)
 }
@@ -26,50 +25,43 @@ func NewAuthHandler(authService *Service) *Handler {
 	}
 }
 
-func (h *Handler) LoginWebInitiate(c *gin.Context) {
+func (h *Handler) LoginMobile(c *gin.Context) {
 	ctx := c.Request.Context()
 	provider := c.Param("provider")
 
-	url, err := h.authService.LoginWebInitiate(ctx, provider)
-	if err != nil {
-		if errors.Is(err, ErrUnsupportedProvider) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
-			return
-		}
-		slog.Get(c).ErrorContext(ctx, "failed to start oauth login", "provider", provider, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+	if !IsSupportedMobileProvider(provider) {
+		slog.Get(c).WarnContext(ctx, "unsupported mobile login provider", "provider", provider)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
 		return
 	}
 
-	c.Redirect(http.StatusTemporaryRedirect, url)
+	var request MobileLoginRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid mobile login body", "provider", provider, "error", err)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	userAuth, err := h.authService.LoginMobile(ctx, provider, request)
+	h.respondWithLogin(c, provider, userAuth, err)
 }
 
-func (h *Handler) LoginWebCallback(c *gin.Context) {
+func (h *Handler) respondWithLogin(c *gin.Context, provider string, userAuth *UserAuthResponse, err error) {
 	ctx := c.Request.Context()
-	provider := c.Param("provider")
 
-	code := c.Query("code")
-	if code == "" {
-		slog.Get(c).WarnContext(ctx, "oauth callback missing code", "provider", provider)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
-		return
-	}
-
-	userAuth, err := h.authService.LoginWebCallback(ctx, provider, code)
-	if err != nil {
-		if errors.Is(err, ErrUnsupportedProvider) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
-			return
-		}
-		slog.Get(c).ErrorContext(ctx, "oauth callback failed", "provider", provider, "error", err)
+	switch {
+	case err == nil:
+		c.JSON(http.StatusOK, gin.H{"jwt": userAuth.JWT, "refresh": userAuth.Refresh})
+	case errors.Is(err, ErrUnsupportedProvider):
+		slog.Get(c).WarnContext(ctx, "unsupported mobile login provider", "provider", provider)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
+	case errors.Is(err, ErrInvalidIdentityToken):
+		slog.Get(c).WarnContext(ctx, "invalid identity token", "provider", provider)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid identity token"})
+	default:
+		slog.Get(c).ErrorContext(ctx, "mobile login failed", "provider", provider, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"jwt":     userAuth.JWT,
-		"refresh": userAuth.Refresh,
-	})
 }
 
 func (h *Handler) RefreshToken(c *gin.Context) {

@@ -18,9 +18,10 @@ import (
 )
 
 type Dependencies struct {
-	Database *database.Database
-	Secrets  *secrets.SecretStore
-	Storage  files.StorageRepository
+	Database          *database.Database
+	Secrets           *secrets.SecretStore
+	Storage           files.StorageRepository
+	IdentityVerifiers auth.IdentityVerifiers
 }
 
 type Handlers struct {
@@ -60,9 +61,8 @@ func Build(d Dependencies) *Handlers {
 	reportHandler := reports.NewReportHandler(reportService)
 
 	authRepository := auth.NewAuthRepository(d.Database)
-	oauthRepository := auth.NewGoogleOAuthRepository()
 	tokenService := auth.NewTokenService(authRepository, d.Secrets)
-	authService := auth.NewAuthService(authRepository, tokenService, oauthRepository, d.Secrets)
+	authService := auth.NewAuthService(authRepository, tokenService, d.IdentityVerifiers)
 	authHandler := auth.NewAuthHandler(authService)
 
 	exportService := export.NewService(authRepository, vehicleRepository, maintenanceRepository, fileRepository, reportRepository, d.Storage)
@@ -98,6 +98,10 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 	}
 
 	authGroup := r.Group("/auth")
+	authGroup.Use(func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Next()
+	})
 	if timeoutMiddleware != nil {
 		authGroup.Use(timeoutMiddleware)
 	}
@@ -105,8 +109,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 		authGroup.Use(middleware.RateLimitMiddleware())
 	}
 	{
-		authGroup.GET("/web/:provider", h.Auth.LoginWebInitiate)
-		authGroup.GET("/web/callback/:provider", h.Auth.LoginWebCallback)
+		authGroup.POST("/mobile/:provider", h.Auth.LoginMobile)
 		authGroup.POST("/development", h.Auth.LoginDevelopment)
 		authGroup.POST("/refresh", h.Auth.RefreshToken)
 	}

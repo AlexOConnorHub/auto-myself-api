@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"auto-myself-api/internal/auth"
 	"auto-myself-api/internal/database"
 	"auto-myself-api/internal/secrets"
 	"auto-myself-api/internal/server"
@@ -22,9 +23,11 @@ import (
 
 // Env is a per-test environment: a router wired to a transaction that is rolled back afterwards.
 type Env struct {
-	Router  *gin.Engine
-	DB      *database.Database
-	Storage *FakeStorage
+	Router     *gin.Engine
+	DB         *database.Database
+	Storage    *FakeStorage
+	GoogleAuth *FakeIdentityVerifier
+	AppleAuth  *FakeIdentityVerifier
 }
 
 var (
@@ -37,8 +40,6 @@ var (
 	baseGorm *gorm.DB
 )
 
-// SetupTest builds the production router over a single transaction on the test database. The
-// schema and seed are applied once per test process; every test rolls its changes back.
 func SetupTest(t *testing.T) *Env {
 	t.Helper()
 
@@ -68,6 +69,8 @@ func SetupTest(t *testing.T) *Env {
 	}
 
 	storage := NewFakeStorage()
+	googleAuth := NewFakeIdentityVerifier(auth.ProviderGoogle)
+	appleAuth := NewFakeIdentityVerifier(auth.ProviderApple)
 
 	gin.SetMode(gin.TestMode)
 	router := server.NewEngine()
@@ -75,13 +78,19 @@ func SetupTest(t *testing.T) *Env {
 		Database: database.NewDatabaseFromGorm(tx),
 		Secrets:  secretStore,
 		Storage:  storage,
+		IdentityVerifiers: auth.IdentityVerifiers{
+			Google: googleAuth,
+			Apple:  appleAuth,
+		},
 	}
 	server.RegisterRoutes(router, server.Build(deps), deps)
 
 	return &Env{
-		Router:  router,
-		DB:      deps.Database,
-		Storage: storage,
+		Router:     router,
+		DB:         deps.Database,
+		Storage:    storage,
+		GoogleAuth: googleAuth,
+		AppleAuth:  appleAuth,
 	}
 }
 

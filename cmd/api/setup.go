@@ -1,6 +1,7 @@
 package main
 
 import (
+	"auto-myself-api/internal/auth"
 	"auto-myself-api/internal/database"
 	"auto-myself-api/internal/google"
 	"auto-myself-api/internal/secrets"
@@ -9,16 +10,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 var requiredSecrets = []string{
-	"DOMAIN",
 	"POSTGRES_DSN",
-	"GOOGLE_OAUTH2_CLIENT_ID",
-	"GOOGLE_OAUTH2_CLIENT_SECRET",
+	"GOOGLE_OAUTH2_CLIENT_IDS",
+	"APPLE_SIGN_IN_CLIENT_IDS",
 	"JWT_SIGNING_SECRET",
 }
 
@@ -26,6 +27,22 @@ func Setup(ctx context.Context, r *gin.Engine) (func(), error) {
 	secretStore, err := secrets.SetupSecrets(ctx, requiredSecrets)
 	if err != nil {
 		return nil, fmt.Errorf("setting up secrets: %w", err)
+	}
+
+	googleClientIDs, err := secretList(secretStore, "GOOGLE_OAUTH2_CLIENT_IDS")
+	if err != nil {
+		_ = secretStore.Close()
+		return nil, fmt.Errorf("reading GOOGLE_OAUTH2_CLIENT_IDS: %w", err)
+	}
+	appleClientIDs, err := secretList(secretStore, "APPLE_SIGN_IN_CLIENT_IDS")
+	if err != nil {
+		_ = secretStore.Close()
+		return nil, fmt.Errorf("reading APPLE_SIGN_IN_CLIENT_IDS: %w", err)
+	}
+	identityVerifiers, err := auth.NewVerifiers(googleClientIDs, appleClientIDs)
+	if err != nil {
+		_ = secretStore.Close()
+		return nil, fmt.Errorf("configuring identity verifiers: %w", err)
 	}
 
 	db, err := CreateSelfUpdatingDatabase(ctx, secretStore)
@@ -37,9 +54,10 @@ func Setup(ctx context.Context, r *gin.Engine) (func(), error) {
 	bucketStorage := storage.NewGCS(google.GetBucketName())
 
 	deps := server.Dependencies{
-		Database: db,
-		Secrets:  secretStore,
-		Storage:  bucketStorage,
+		Database:          db,
+		Secrets:           secretStore,
+		Storage:           bucketStorage,
+		IdentityVerifiers: identityVerifiers,
 	}
 	server.RegisterRoutes(r, server.Build(deps), deps)
 
@@ -82,6 +100,32 @@ func CreateSelfUpdatingDatabase(ctx context.Context, s *secrets.SecretStore) (*d
 	})
 
 	return wrapper, nil
+}
+
+func secretList(store *secrets.SecretStore, name string) ([]string, error) {
+	value, err := store.Get(name)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	var list []string
+	for _, part := range strings.Split(value.Value, ",") {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		if _, exists := seen[item]; exists {
+			continue
+		}
+		seen[item] = struct{}{}
+		list = append(list, item)
+	}
+	if len(list) == 0 {
+		return nil, fmt.Errorf("%s must contain at least one client ID", name)
+	}
+
+	return list, nil
 }
 
 // Swaps in a fresh connection after the DSN rotates.
