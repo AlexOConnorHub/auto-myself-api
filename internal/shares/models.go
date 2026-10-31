@@ -47,3 +47,10 @@ func (VehicleUserAccess) TableName() string {
 func (v *VehicleUserAccess) BeforeCreate(tx *gorm.DB) (err error) {
 	return helpers.BeforeCreateID(tx, v)
 }
+
+type VehicleUserAccessWeb struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	WriteAccess bool      `json:"write_access"`
+	CreatedAt   string    `json:"created_at"`
+}

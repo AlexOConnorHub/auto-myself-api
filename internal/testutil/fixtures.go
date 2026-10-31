@@ -36,6 +36,14 @@ type ShareFixture struct {
 	CreatedBy   uuid.UUID
 }
 
+type VehicleAccessFixture struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	VehicleID   uuid.UUID
+	WriteAccess bool
+	CreatedBy   uuid.UUID
+}
+
 type MaintenanceFixture struct {
 	ID           uuid.UUID
 	VehicleID    uuid.UUID
@@ -97,6 +105,15 @@ var VehicleIDs = []uuid.UUID{Vehicle1ID, Vehicle2ID, Vehicle3ID, Vehicle4ID, Veh
 var Shares = []ShareFixture{
 	{ID: Share1ID, UserID: User5ID, VehicleID: Vehicle4ID, WriteAccess: true, CreatedBy: User6ID},
 	{ID: Share2ID, UserID: User4ID, VehicleID: Vehicle4ID, WriteAccess: false, CreatedBy: User6ID},
+}
+
+var VehicleAccesses = []VehicleAccessFixture{
+	{ID: mustUUID("019785fe-4eb4-766e-9c45-e4287c35fe36"), UserID: User2ID, VehicleID: Vehicle2ID, WriteAccess: true, CreatedBy: User1ID},
+	{ID: mustUUID("019785fe-4eb4-766e-9c45-ea1fef642df3"), UserID: User3ID, VehicleID: Vehicle2ID, WriteAccess: false, CreatedBy: User1ID},
+	{ID: mustUUID("019785fe-4eb4-766e-9c45-ed47aa22a565"), UserID: User7ID, VehicleID: Vehicle2ID, WriteAccess: true, CreatedBy: User1ID},
+	{ID: mustUUID("019785fe-4eb4-766e-9c45-f0684e1dcd13"), UserID: User7ID, VehicleID: Vehicle4ID, WriteAccess: true, CreatedBy: User6ID},
+	{ID: mustUUID("019785fe-4eb4-766e-9c46-021143f69370"), UserID: User8ID, VehicleID: Vehicle2ID, WriteAccess: true, CreatedBy: User1ID},
+	{ID: mustUUID("019785fe-4eb4-766e-9c46-045710f92920"), UserID: User8ID, VehicleID: Vehicle4ID, WriteAccess: false, CreatedBy: User6ID},
 }
 
 var Maintenances = []MaintenanceFixture{

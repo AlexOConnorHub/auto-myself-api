@@ -187,6 +187,14 @@ CREATE TRIGGER update_vehicle_user_access_pending_updated_at
    BEFORE UPDATE ON "vehicle_user_access_pending"
    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
+CREATE UNIQUE INDEX "vehicle_user_access_active_unique"
+    ON "vehicle_user_access" ("vehicle_id" ASC, "user_id" ASC)
+    WHERE "deleted_at" IS NULL;
+
+CREATE UNIQUE INDEX "vehicle_user_access_pending_active_unique"
+    ON "vehicle_user_access_pending" ("vehicle_id" ASC, "user_id" ASC)
+    WHERE "deleted_at" IS NULL;
+
 CREATE TABLE "maintenance_records" (
     "id" uuid NOT NULL,
     "vehicle_id" uuid NOT NULL,

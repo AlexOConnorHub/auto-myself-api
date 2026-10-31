@@ -16,6 +16,10 @@ type ShareRepository interface {
 	DeleteByID(context.Context, uuid.UUID) error
 	Accept(context.Context, *VehicleUserAccessPending) (*VehicleUserAccess, error)
 	ExistsForVehicleAndUser(context.Context, uuid.UUID, uuid.UUID) (bool, error)
+	FindAccessForVehicle(context.Context, uuid.UUID) ([]VehicleUserAccess, error)
+	FindAccessForVehicleAndUser(context.Context, uuid.UUID, uuid.UUID) (*VehicleUserAccess, error)
+	FindAccessByID(context.Context, uuid.UUID) (*VehicleUserAccess, error)
+	DeleteAccessByID(context.Context, uuid.UUID) error
 }
 
 type Repository struct {
@@ -57,6 +61,32 @@ func (r *Repository) DeleteByID(ctx context.Context, id uuid.UUID) error {
 	return helpers.DeleteByID[VehicleUserAccessPending](ctx, r.database.GetGorm(), id)
 }
 
+func (r *Repository) FindAccessForVehicle(ctx context.Context, vehicleID uuid.UUID) ([]VehicleUserAccess, error) {
+	return gorm.G[VehicleUserAccess](r.database.GetGorm()).
+		Where("vehicle_id = ?", vehicleID).
+		Order("created_at ASC, id ASC").
+		Find(ctx)
+}
+
+func (r *Repository) FindAccessForVehicleAndUser(ctx context.Context, vehicleID, userID uuid.UUID) (*VehicleUserAccess, error) {
+	access, err := gorm.G[VehicleUserAccess](r.database.GetGorm()).
+		Where("vehicle_id = ? AND user_id = ?", vehicleID, userID).
+		Order("created_at ASC, id ASC").
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &access, nil
+}
+
+func (r *Repository) FindAccessByID(ctx context.Context, id uuid.UUID) (*VehicleUserAccess, error) {
+	return helpers.FindByID[VehicleUserAccess](ctx, r.database.GetGorm(), id)
+}
+
+func (r *Repository) DeleteAccessByID(ctx context.Context, id uuid.UUID) error {
+	return helpers.DeleteByID[VehicleUserAccess](ctx, r.database.GetGorm(), id)
+}
+
 // Accept hard-deletes the pending share
 func (r *Repository) Accept(ctx context.Context, share *VehicleUserAccessPending) (*VehicleUserAccess, error) {
 	var access *VehicleUserAccess
@@ -64,13 +94,13 @@ func (r *Repository) Accept(ctx context.Context, share *VehicleUserAccessPending
 	err := r.database.GetGorm().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		access = &VehicleUserAccess{
 			VehicleUserAccessBase: share.VehicleUserAccessBase,
-			CreatedBy:             share.UserID,
+			CreatedBy:             share.CreatedBy,
 		}
 		if err := gorm.G[VehicleUserAccess](tx).Create(ctx, access); err != nil {
 			return err
 		}
 
-		result := tx.Unscoped().Where("id = ?", share.ID).Delete(&VehicleUserAccessPending{})
+		result := tx.Unscoped().Where("id = ? AND deleted_at IS NULL", share.ID).Delete(&VehicleUserAccessPending{})
 		if result.Error != nil {
 			return result.Error
 		}
@@ -86,21 +116,16 @@ func (r *Repository) Accept(ctx context.Context, share *VehicleUserAccessPending
 }
 
 func (r *Repository) ExistsForVehicleAndUser(ctx context.Context, vehicleID, userID uuid.UUID) (bool, error) {
-	accessCount, err := gorm.G[VehicleUserAccess](r.database.GetGorm()).
-		Where("vehicle_id = ? AND user_id = ?", vehicleID, userID).
-		Count(ctx, "*")
+	var count int64
+	err := gorm.G[VehicleUserAccess](r.database.GetGorm()).Raw(`
+SELECT
+	(SELECT count(*) FROM vehicle_user_access
+		WHERE vehicle_id = $1 AND user_id = $2 AND deleted_at IS NULL)
+	+
+	(SELECT count(*) FROM vehicle_user_access_pending
+		WHERE vehicle_id = $1 AND user_id = $2 AND deleted_at IS NULL)`, vehicleID, userID).Scan(ctx, &count)
 	if err != nil {
 		return false, err
 	}
-	if accessCount > 0 {
-		return true, nil
-	}
-
-	pendingCount, err := gorm.G[VehicleUserAccessPending](r.database.GetGorm()).
-		Where("vehicle_id = ? AND user_id = ?", vehicleID, userID).
-		Count(ctx, "*")
-	if err != nil {
-		return false, err
-	}
-	return pendingCount > 0, nil
+	return count > 0, nil
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
@@ -23,6 +24,8 @@ type ShareService interface {
 	CreateShare(context.Context, *VehicleUserAccessPending) error
 	AcceptShare(context.Context, uuid.UUID) (*VehicleUserAccess, error)
 	DeleteShareByID(context.Context, uuid.UUID) error
+	GetAccessForVehicle(context.Context, uuid.UUID) ([]VehicleUserAccessWeb, error)
+	DeleteAccessByID(context.Context, uuid.UUID) error
 }
 
 type Service struct {
@@ -132,6 +135,9 @@ func (s *Service) AcceptShare(ctx context.Context, id uuid.UUID) (*VehicleUserAc
 
 	access, err := s.shareRepository.Accept(ctx, share)
 	if err != nil {
+		if errors.Is(err, helpers.ErrRowCountOff) {
+			return nil, gorm.ErrRecordNotFound
+		}
 		return nil, fmt.Errorf("accepting share %s: %w", id, err)
 	}
 	return access, nil
@@ -153,7 +159,83 @@ func (s *Service) DeleteShareByID(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if err := s.shareRepository.DeleteByID(ctx, id); err != nil {
+		if errors.Is(err, helpers.ErrRowCountOff) {
+			return gorm.ErrRecordNotFound
+		}
 		return fmt.Errorf("deleting share %s: %w", id, err)
+	}
+	return nil
+}
+
+func (s *Service) GetAccessForVehicle(ctx context.Context, vehicleID uuid.UUID) ([]VehicleUserAccessWeb, error) {
+	user := ctx.Value(helpers.UserCtxKey).(*users.User)
+
+	vehicle, err := s.vehicleRepository.FindByID(ctx, vehicleID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("finding vehicle %s: %w", vehicleID, err)
+	}
+
+	var rows []VehicleUserAccess
+	if vehicle.CreatedBy == user.ID {
+		rows, err = s.shareRepository.FindAccessForVehicle(ctx, vehicleID)
+		if err != nil {
+			return nil, fmt.Errorf("finding access for vehicle %s: %w", vehicleID, err)
+		}
+	} else {
+		access, findErr := s.shareRepository.FindAccessForVehicleAndUser(ctx, vehicleID, user.ID)
+		if findErr != nil {
+			if errors.Is(findErr, gorm.ErrRecordNotFound) {
+				return nil, findErr
+			}
+			return nil, fmt.Errorf("finding access to vehicle %s for user %s: %w", vehicleID, user.ID, findErr)
+		}
+		rows = []VehicleUserAccess{*access}
+	}
+
+	entries := make([]VehicleUserAccessWeb, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, VehicleUserAccessWeb{
+			ID:          row.ID,
+			UserID:      row.UserID,
+			WriteAccess: row.WriteAccess,
+			CreatedAt:   row.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return entries, nil
+}
+
+func (s *Service) DeleteAccessByID(ctx context.Context, accessID uuid.UUID) error {
+	user := ctx.Value(helpers.UserCtxKey).(*users.User)
+
+	access, err := s.shareRepository.FindAccessByID(ctx, accessID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return fmt.Errorf("finding access %s: %w", accessID, err)
+	}
+
+	vehicle, err := s.vehicleRepository.FindByID(ctx, access.VehicleID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return fmt.Errorf("finding vehicle %s: %w", access.VehicleID, err)
+	}
+
+	if vehicle.CreatedBy != user.ID && access.UserID != user.ID {
+		return gorm.ErrRecordNotFound
+	}
+
+	if err := s.shareRepository.DeleteAccessByID(ctx, accessID); err != nil {
+		// A concurrent revoke already removed the row.
+		if errors.Is(err, helpers.ErrRowCountOff) {
+			return gorm.ErrRecordNotFound
+		}
+		return fmt.Errorf("deleting access %s: %w", accessID, err)
 	}
 	return nil
 }

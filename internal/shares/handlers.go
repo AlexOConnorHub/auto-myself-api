@@ -19,6 +19,8 @@ type ShareHandler interface {
 	CreateShare(*gin.Context)
 	AcceptShare(*gin.Context)
 	DeleteShareByID(*gin.Context)
+	GetVehicleAccess(*gin.Context)
+	DeleteAccessByID(*gin.Context)
 }
 
 type Handler struct {
@@ -118,6 +120,10 @@ func (h *Handler) AcceptShare(c *gin.Context) {
 		slog.Get(c).InfoContext(ctx, "share not found", "share_id", shareUUID)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Share not found"})
 		return
+	case errors.Is(err, gorm.ErrDuplicatedKey):
+		slog.Get(c).WarnContext(ctx, "access already exists", "share_id", shareUUID)
+		c.JSON(http.StatusConflict, gin.H{"error": "Access already exists"})
+		return
 	default:
 		slog.Get(c).ErrorContext(ctx, "failed to accept share", "share_id", shareUUID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -141,6 +147,46 @@ func (h *Handler) DeleteShareByID(c *gin.Context) {
 		return
 	default:
 		slog.Get(c).ErrorContext(ctx, "failed to delete share", "share_id", shareUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) GetVehicleAccess(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	vehicleUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
+
+	accesses, err := h.shareService.GetAccessForVehicle(ctx, vehicleUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "vehicle not found", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to list vehicle access", "vehicle_id", vehicleUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, accesses)
+}
+
+func (h *Handler) DeleteAccessByID(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	accessUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
+
+	err := h.shareService.DeleteAccessByID(ctx, accessUUID)
+	switch {
+	case err == nil:
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "access not found", "access_id", accessUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Access not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to revoke access", "access_id", accessUUID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}

@@ -122,6 +122,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 			vehicleGroup.PATCH("/:uuid", h.Vehicle.UpdateByID)
 			vehicleGroup.DELETE("/:uuid", h.Vehicle.DeleteByID)
 			vehicleGroup.GET("/:uuid/maintenance", h.Maintenance.FindIDs)
+			vehicleGroup.GET("/:uuid/access", h.Share.GetVehicleAccess)
 		}
 
 		maintenanceGroup := v1.Group("/maintenance")
@@ -147,6 +148,11 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 			shareGroup.GET("/:uuid", h.Share.GetShareByID)
 			shareGroup.PATCH("/:uuid", h.Share.AcceptShare)
 			shareGroup.DELETE("/:uuid", h.Share.DeleteShareByID)
+		}
+
+		accessGroup := v1.Group("/access")
+		{
+			accessGroup.DELETE("/:uuid", h.Share.DeleteAccessByID)
 		}
 
 		reportGroup := v1.Group("/report")
