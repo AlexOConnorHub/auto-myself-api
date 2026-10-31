@@ -12,9 +12,15 @@ type UserPost struct {
 	Username string `json:"username,omitempty" gorm:"type:text;"`
 }
 
+type UserUpdatePost struct {
+	Username string `json:"username,omitempty"`
+	Version  int64  `json:"version" binding:"required,gt=0"`
+}
+
 type UserWeb struct {
 	UserPost
-	ID uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
+	ID      uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
+	Version int64     `json:"version" gorm:"not null"`
 }
 
 type User struct {
@@ -32,6 +38,9 @@ func (User) TableName() string {
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	if u.Role == "" {
 		u.Role = RoleUser
+	}
+	if u.Version == 0 {
+		u.Version = 1
 	}
 	return helpers.BeforeCreateID(tx, u)
 }

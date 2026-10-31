@@ -132,7 +132,10 @@ func (s *Service) UpdateByID(ctx context.Context, id uuid.UUID, input *Report) e
 		input.ResolvedBy = &user.ID
 	}
 
-	if err := s.repository.UpdateByID(ctx, id, input); err != nil {
+	if err := s.repository.UpdateByID(ctx, id, input.Version, input); err != nil {
+		if errors.Is(err, helpers.ErrVersionConflict) {
+			return err
+		}
 		return fmt.Errorf("updating report %s: %w", id, err)
 	}
 	return nil

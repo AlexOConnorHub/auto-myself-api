@@ -11,7 +11,7 @@ import (
 
 type UserRepository interface {
 	FindByID(context.Context, uuid.UUID) (*User, error)
-	UpdateByID(context.Context, uuid.UUID, *User) error
+	UpdateByID(context.Context, uuid.UUID, int64, *User) error
 	CanRead(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
@@ -29,8 +29,8 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return helpers.FindByID[User](ctx, r.database.GetGorm(), id)
 }
 
-func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, user *User) error {
-	return helpers.UpdateByID[User](ctx, r.database.GetGorm(), id, user)
+func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, expectedVersion int64, user *User) error {
+	return helpers.UpdateByIDVersioned[User](ctx, r.database.GetGorm(), id, expectedVersion, user)
 }
 
 func (r *Repository) CanRead(ctx context.Context, currentUser uuid.UUID, targetUser uuid.UUID) (bool, error) {

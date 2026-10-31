@@ -150,12 +150,22 @@ func (h *Handler) UpdateByID(c *gin.Context) {
 			MaintenanceRecordPost: MaintenanceRecordPost{
 				MaintenanceRecordFields: input.MaintenanceRecordFields,
 			},
+			Version: input.Version,
 		},
 	}
 
 	err := h.maintenanceService.UpdateByID(ctx, maintenanceUUID, &maintenanceRecord)
 	switch {
 	case err == nil:
+	case errors.Is(err, helpers.ErrVersionConflict):
+		body := gin.H{"error": "Version conflict"}
+		var conflict *helpers.VersionConflictError
+		if errors.As(err, &conflict) {
+			body["version"] = conflict.CurrentVersion
+		}
+		slog.Get(c).WarnContext(ctx, "version conflict updating maintenance record", "maintenance_id", maintenanceUUID)
+		c.JSON(http.StatusConflict, body)
+		return
 	case errors.Is(err, helpers.ErrAccessDenied):
 		slog.Get(c).WarnContext(ctx, "access denied updating maintenance record", "maintenance_id", maintenanceUUID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})

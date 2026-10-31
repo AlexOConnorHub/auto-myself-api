@@ -21,6 +21,7 @@ type maintenanceResponse struct {
 	Interval     int       `json:"interval"`
 	IntervalType string    `json:"interval_type"`
 	Cost         string    `json:"cost"`
+	Version      int64     `json:"version"`
 }
 
 func expectedMaintenance(fixture testutil.MaintenanceFixture) maintenanceResponse {
@@ -40,6 +41,7 @@ func expectedMaintenance(fixture testutil.MaintenanceFixture) maintenanceRespons
 		Interval:     fixture.Interval,
 		IntervalType: fixture.IntervalType,
 		Cost:         fixture.Cost,
+		Version:      1,
 	}
 }
 
@@ -74,6 +76,9 @@ func assertMaintenance(t *testing.T, got, want maintenanceResponse) {
 	}
 	if got.Cost != want.Cost {
 		t.Errorf("expected cost %q, got %q", want.Cost, got.Cost)
+	}
+	if got.Version != want.Version {
+		t.Errorf("expected version %d, got %d", want.Version, got.Version)
 	}
 }
 
@@ -150,6 +155,7 @@ func TestMaintenancePost(t *testing.T) {
 		"interval":      5000,
 		"interval_type": "miles",
 		"cost":          "100.00",
+		"version":       99,
 	}
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", testutil.User1ID, testutil.JSONBody(t, body))
@@ -170,6 +176,9 @@ func TestMaintenancePost(t *testing.T) {
 	}
 	if response.CreatedBy != testutil.User1ID {
 		t.Errorf("expected created_by %s, got %s", testutil.User1ID, response.CreatedBy)
+	}
+	if response.Version != 1 {
+		t.Errorf("create should ignore a supplied version and start at 1, got %d", response.Version)
 	}
 }
 
@@ -239,7 +248,7 @@ func TestMaintenancePatch(t *testing.T) {
 	newNotes := fixture.Notes + " MODIFIED"
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), vehicleOwner(fixture.VehicleID),
-		testutil.JSONBody(t, map[string]any{"notes": newNotes}))
+		testutil.JSONBody(t, map[string]any{"notes": newNotes, "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	var response maintenanceResponse
@@ -253,6 +262,9 @@ func TestMaintenancePatch(t *testing.T) {
 	if response.Odometer != fixture.Odometer || response.Cost != fixture.Cost {
 		t.Errorf("PATCH should not clear untouched fields: %+v", response)
 	}
+	if response.Version != 2 {
+		t.Errorf("expected version 2 after the first update, got %d", response.Version)
+	}
 }
 
 func TestMaintenancePatchCannotMoveVehicle(t *testing.T) {
@@ -262,13 +274,98 @@ func TestMaintenancePatchCannotMoveVehicle(t *testing.T) {
 	otherVehicle := testutil.Vehicle2ID
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), vehicleOwner(fixture.VehicleID),
-		testutil.JSONBody(t, map[string]any{"vehicle_id": otherVehicle, "notes": "attempted move"}))
+		testutil.JSONBody(t, map[string]any{"vehicle_id": otherVehicle, "notes": "attempted move", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	var response maintenanceResponse
 	testutil.DecodeJSON(t, w, &response)
 	if response.VehicleID != fixture.VehicleID {
 		t.Errorf("maintenance record moved to %s; expected to stay on %s", response.VehicleID, fixture.VehicleID)
+	}
+}
+
+func TestMaintenancePatchVersionConflict(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	fixture := testutil.Maintenances[0]
+	owner := vehicleOwner(fixture.VehicleID)
+	path := "/v1/maintenance/" + fixture.ID.String()
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, owner,
+		testutil.JSONBody(t, map[string]any{"notes": "first", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var first maintenanceResponse
+	testutil.DecodeJSON(t, w, &first)
+	if first.Version != 2 {
+		t.Fatalf("expected version 2 after the first update, got %d", first.Version)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, owner,
+		testutil.JSONBody(t, map[string]any{"notes": "second", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusConflict)
+
+	var conflict struct {
+		Error   string `json:"error"`
+		Version int64  `json:"version"`
+	}
+	testutil.DecodeJSON(t, w, &conflict)
+	if conflict.Error != "Version conflict" || conflict.Version != 2 {
+		t.Errorf("expected a version conflict at version 2, got %+v", conflict)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, path, owner, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var stored maintenanceResponse
+	testutil.DecodeJSON(t, w, &stored)
+	if stored.Notes != "first" || stored.Version != 2 {
+		t.Errorf("the stale update must not be applied: %+v", stored)
+	}
+}
+
+func TestMaintenancePatchRequiresVersion(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	fixture := testutil.Maintenances[0]
+	path := "/v1/maintenance/" + fixture.ID.String()
+
+	bodies := map[string]map[string]any{
+		"missing":  {"notes": "missing version"},
+		"zero":     {"notes": "zero version", "version": 0},
+		"negative": {"notes": "negative version", "version": -1},
+	}
+
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, vehicleOwner(fixture.VehicleID), testutil.JSONBody(t, body))
+			testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+		})
+	}
+}
+
+func TestMaintenancePatchIgnoresProtectedFields(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	fixture := testutil.Maintenances[0]
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), vehicleOwner(fixture.VehicleID),
+		testutil.JSONBody(t, map[string]any{
+			"notes":      "renamed",
+			"version":    1,
+			"ID":         testutil.Maintenances[1].ID,
+			"id":         testutil.Maintenances[1].ID,
+			"created_by": testutil.User2ID,
+		}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response maintenanceResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.ID != fixture.ID {
+		t.Errorf("PATCH must not change the ID: got %s, want %s", response.ID, fixture.ID)
+	}
+	if response.CreatedBy != fixture.CreatedBy {
+		t.Errorf("PATCH must not change created_by: got %s, want %s", response.CreatedBy, fixture.CreatedBy)
 	}
 }
 
@@ -321,9 +418,10 @@ func TestMaintenanceWritePermissions(t *testing.T) {
 		vi := vehicleIndex(fixture.VehicleID)
 		for userIndex, accessRow := range testutil.VehicleAccessMatrix {
 			user := testutil.Users[userIndex]
+			version := testutil.CurrentVersion(t, env.DB.GetGorm(), "maintenance_records", fixture.ID)
 
 			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/maintenance/"+fixture.ID.String(), user.ID,
-				testutil.JSONBody(t, map[string]any{"notes": fixture.Notes + " MODIFIED"}))
+				testutil.JSONBody(t, map[string]any{"notes": fixture.Notes + " MODIFIED", "version": version}))
 
 			switch {
 			case accessRow[vi] == testutil.WRITE:

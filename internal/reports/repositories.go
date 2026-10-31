@@ -16,7 +16,7 @@ type ReportRepository interface {
 	ListAllDateRange(context.Context, time.Time, time.Time) ([]uuid.UUID, error)
 	ListFromUserID(context.Context, uuid.UUID) ([]uuid.UUID, error)
 	FindByID(context.Context, uuid.UUID) (*Report, error)
-	UpdateByID(context.Context, uuid.UUID, *Report) error
+	UpdateByID(context.Context, uuid.UUID, int64, *Report) error
 }
 
 type Repository struct {
@@ -80,8 +80,8 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Report, error
 	return helpers.FindByID[Report](ctx, r.database.GetGorm(), id)
 }
 
-func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, report *Report) error {
-	return helpers.UpdateByID[Report](ctx, r.database.GetGorm(), id, report)
+func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, expectedVersion int64, report *Report) error {
+	return helpers.UpdateByIDVersioned[Report](ctx, r.database.GetGorm(), id, expectedVersion, report)
 }
 
 func reportIDs(reports []Report) []uuid.UUID {

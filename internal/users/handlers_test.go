@@ -12,6 +12,7 @@ import (
 type userResponse struct {
 	ID       uuid.UUID `json:"ID"`
 	Username string    `json:"username"`
+	Version  int64     `json:"version"`
 }
 
 func TestUsersVerifyAllExist(t *testing.T) {
@@ -51,7 +52,7 @@ func TestUserPatch(t *testing.T) {
 	newName := "MODIFIED " + user.Username
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", user.ID,
-		testutil.JSONBody(t, map[string]string{"username": newName}))
+		testutil.JSONBody(t, map[string]any{"username": newName, "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	var response userResponse
@@ -59,12 +60,101 @@ func TestUserPatch(t *testing.T) {
 	if response.Username != newName {
 		t.Errorf("expected updated username %q, got %q", newName, response.Username)
 	}
+	if response.Version != 2 {
+		t.Errorf("expected version 2 after the first update, got %d", response.Version)
+	}
 
 	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user", user.ID, nil)
 	testutil.RequireStatus(t, w, http.StatusOK)
 	testutil.DecodeJSON(t, w, &response)
 	if response.Username != newName {
 		t.Errorf("expected persisted username %q, got %q", newName, response.Username)
+	}
+	if response.Version != 2 {
+		t.Errorf("expected persisted version 2, got %d", response.Version)
+	}
+}
+
+func TestUserPatchVersionConflict(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	user := testutil.Users[0]
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", user.ID,
+		testutil.JSONBody(t, map[string]any{"username": "first", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var first userResponse
+	testutil.DecodeJSON(t, w, &first)
+	if first.Version != 2 {
+		t.Fatalf("expected version 2 after the first update, got %d", first.Version)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", user.ID,
+		testutil.JSONBody(t, map[string]any{"username": "second", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusConflict)
+
+	var conflict struct {
+		Error   string `json:"error"`
+		Version int64  `json:"version"`
+	}
+	testutil.DecodeJSON(t, w, &conflict)
+	if conflict.Error != "Version conflict" || conflict.Version != 2 {
+		t.Errorf("expected a version conflict at version 2, got %+v", conflict)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user", user.ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var stored userResponse
+	testutil.DecodeJSON(t, w, &stored)
+	if stored.Username != "first" || stored.Version != 2 {
+		t.Errorf("the stale update must not be applied: %+v", stored)
+	}
+}
+
+func TestUserPatchRequiresVersion(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	bodies := map[string]map[string]any{
+		"missing":  {"username": "missing version"},
+		"zero":     {"username": "zero version", "version": 0},
+		"negative": {"username": "negative version", "version": -1},
+	}
+
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", testutil.User5ID, testutil.JSONBody(t, body))
+			testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+		})
+	}
+}
+
+func TestUserPatchIgnoresProtectedFields(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/user", testutil.User5ID,
+		testutil.JSONBody(t, map[string]any{
+			"username": "renamed",
+			"version":  1,
+			"ID":       testutil.User1ID,
+			"role":     "admin",
+		}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response userResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.ID != testutil.User5ID {
+		t.Errorf("PATCH must not change the user ID: got %s, want %s", response.ID, testutil.User5ID)
+	}
+
+	var role string
+	if err := env.DB.GetGorm().Table("users").Select("role").
+		Where("id = ?", testutil.User5ID).Row().Scan(&role); err != nil {
+		t.Fatalf("reading role: %v", err)
+	}
+	if role != "user" {
+		t.Errorf("PATCH must not change the role: got %q, want %q", role, "user")
 	}
 }
 

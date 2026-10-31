@@ -18,9 +18,15 @@ type VehiclePost struct {
 	Lpn      string `json:"lpn,omitempty" gorm:"type:text"`
 }
 
+type VehicleUpdatePost struct {
+	VehiclePost
+	Version int64 `json:"version" binding:"required,gt=0"`
+}
+
 type VehicleWeb struct {
 	VehiclePost
-	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	ID      uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	Version int64     `json:"version" gorm:"not null"`
 }
 
 type Vehicle struct {
@@ -38,6 +44,9 @@ func (Vehicle) TableName() string {
 func (v *Vehicle) BeforeCreate(tx *gorm.DB) (err error) {
 	if v.ID.IsNil() {
 		v.ID, err = uuid.NewV7()
+	}
+	if v.Version == 0 {
+		v.Version = 1
 	}
 	return err
 }

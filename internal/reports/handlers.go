@@ -144,6 +144,7 @@ func (h *Handler) UpdateByID(c *gin.Context) {
 		ReportWeb: ReportWeb{
 			Resolved:    input.Resolved,
 			PublicNotes: input.PublicNotes,
+			Version:     input.Version,
 		},
 		InternalNotes: input.InternalNotes,
 	}
@@ -151,6 +152,15 @@ func (h *Handler) UpdateByID(c *gin.Context) {
 	err := h.service.UpdateByID(ctx, reportUUID, &report)
 	switch {
 	case err == nil:
+	case errors.Is(err, helpers.ErrVersionConflict):
+		body := gin.H{"error": "Version conflict"}
+		var conflict *helpers.VersionConflictError
+		if errors.As(err, &conflict) {
+			body["version"] = conflict.CurrentVersion
+		}
+		slog.Get(c).WarnContext(ctx, "version conflict updating report", "report_id", reportUUID)
+		c.JSON(http.StatusConflict, body)
+		return
 	case errors.Is(err, helpers.ErrAccessDenied):
 		slog.Get(c).WarnContext(ctx, "access denied updating report", "report_id", reportUUID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})

@@ -12,7 +12,7 @@ import (
 type MaintenanceRepository interface {
 	FindIDs(context.Context, uuid.UUID) ([]uuid.UUID, error)
 	FindByID(context.Context, uuid.UUID) (*MaintenanceRecord, error)
-	UpdateByID(context.Context, uuid.UUID, *MaintenanceRecord) error
+	UpdateByID(context.Context, uuid.UUID, int64, *MaintenanceRecord) error
 	DeleteByID(context.Context, uuid.UUID) error
 	Create(context.Context, *MaintenanceRecord) error
 }
@@ -45,8 +45,8 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*MaintenanceRe
 	return helpers.FindByID[MaintenanceRecord](ctx, r.database.GetGorm(), id)
 }
 
-func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, record *MaintenanceRecord) error {
-	return helpers.UpdateByID[MaintenanceRecord](ctx, r.database.GetGorm(), id, record)
+func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, expectedVersion int64, record *MaintenanceRecord) error {
+	return helpers.UpdateByIDVersioned[MaintenanceRecord](ctx, r.database.GetGorm(), id, expectedVersion, record)
 }
 
 func (r *Repository) DeleteByID(ctx context.Context, id uuid.UUID) error {

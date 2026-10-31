@@ -82,7 +82,10 @@ func (s *Service) UpdateByID(ctx context.Context, id uuid.UUID, vehicle *Vehicle
 		return err
 	}
 
-	if err := s.vehicleRepository.UpdateByID(ctx, id, vehicle); err != nil {
+	if err := s.vehicleRepository.UpdateByID(ctx, id, vehicle.Version, vehicle); err != nil {
+		if errors.Is(err, helpers.ErrVersionConflict) {
+			return err
+		}
 		return fmt.Errorf("updating vehicle %s: %w", id, err)
 	}
 	return nil

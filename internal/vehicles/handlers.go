@@ -124,16 +124,27 @@ func (h *Handler) UpdateByID(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
 	vehicleUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	var vehicle Vehicle
-	if err := c.ShouldBindJSON(&vehicle.VehicleWeb.VehiclePost); err != nil {
+	var input VehicleUpdatePost
+	if err := c.ShouldBindJSON(&input); err != nil {
 		slog.Get(c).WarnContext(ctx, "invalid vehicle body", "error", err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
 		return
 	}
 
+	vehicle := Vehicle{VehicleWeb: VehicleWeb{VehiclePost: input.VehiclePost, Version: input.Version}}
+
 	err := h.vehicleService.UpdateByID(ctx, vehicleUUID, &vehicle)
 	switch {
 	case err == nil:
+	case errors.Is(err, helpers.ErrVersionConflict):
+		body := gin.H{"error": "Version conflict"}
+		var conflict *helpers.VersionConflictError
+		if errors.As(err, &conflict) {
+			body["version"] = conflict.CurrentVersion
+		}
+		slog.Get(c).WarnContext(ctx, "version conflict updating vehicle", "vehicle_id", vehicleUUID)
+		c.JSON(http.StatusConflict, body)
+		return
 	case errors.Is(err, helpers.ErrAccessDenied):
 		slog.Get(c).WarnContext(ctx, "access denied updating vehicle", "vehicle_id", vehicleUUID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})

@@ -26,12 +26,14 @@ type MaintenanceRecordPost struct {
 // MaintenanceRecordUpdatePost omits VehicleID as it may not change
 type MaintenanceRecordUpdatePost struct {
 	MaintenanceRecordFields
+	Version int64 `json:"version" binding:"required,gt=0"`
 }
 
 type MaintenanceRecordWeb struct {
 	MaintenanceRecordPost
 	ID        uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey;not null"`
 	CreatedBy uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
+	Version   int64     `json:"version" gorm:"not null"`
 }
 
 type MaintenanceRecord struct {
@@ -46,5 +48,8 @@ func (MaintenanceRecord) TableName() string {
 }
 
 func (m *MaintenanceRecord) BeforeCreate(tx *gorm.DB) (err error) {
+	if m.Version == 0 {
+		m.Version = 1
+	}
 	return helpers.BeforeCreateID(tx, m)
 }

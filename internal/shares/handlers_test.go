@@ -189,7 +189,7 @@ func TestShareAcceptGrantsAccess(t *testing.T) {
 
 	// ...and write access to the vehicle is live.
 	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+share.VehicleID.String(), share.UserID,
-		testutil.JSONBody(t, map[string]any{"nickname": "Accepted Vehicle"}))
+		testutil.JSONBody(t, map[string]any{"nickname": "Accepted Vehicle", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	// Accepting a second time finds nothing.

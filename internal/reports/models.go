@@ -18,6 +18,7 @@ type ReportResolutionPost struct {
 	Resolved      bool   `json:"resolved,omitempty"`
 	PublicNotes   string `json:"public_notes,omitempty"`
 	InternalNotes string `json:"internal_notes,omitempty"`
+	Version       int64  `json:"version" binding:"required,gt=0"`
 }
 
 type ReportWeb struct {
@@ -27,6 +28,7 @@ type ReportWeb struct {
 	PublicNotes string     `json:"public_notes,omitempty" gorm:"type:text;"`
 	Resolved    bool       `json:"resolved,omitempty" gorm:"type:boolean;not null;default:false"`
 	ResolvedAt  *time.Time `json:"resolved_at,omitempty" gorm:"type:timestamp with time zone;"`
+	Version     int64      `json:"version" gorm:"not null"`
 }
 
 type Report struct {
@@ -43,5 +45,8 @@ func (Report) TableName() string {
 }
 
 func (r *Report) BeforeCreate(tx *gorm.DB) (err error) {
+	if r.Version == 0 {
+		r.Version = 1
+	}
 	return helpers.BeforeCreateID(tx, r)
 }

@@ -18,6 +18,7 @@ type reportResponse struct {
 	PublicNotes   string    `json:"public_notes"`
 	Resolved      bool      `json:"resolved"`
 	ResolvedAt    *string   `json:"resolved_at"`
+	Version       int64     `json:"version"`
 }
 
 func createReport(t *testing.T, env *testutil.Env, userID uuid.UUID) reportResponse {
@@ -34,6 +35,9 @@ func createReport(t *testing.T, env *testutil.Env, userID uuid.UUID) reportRespo
 
 	var response reportResponse
 	testutil.DecodeJSON(t, w, &response)
+	if response.Version != 1 {
+		t.Fatalf("expected a new report at version 1, got %d", response.Version)
+	}
 	return response
 }
 
@@ -44,6 +48,7 @@ func TestReportCreate(t *testing.T) {
 		"reported_topic": "users",
 		"reported_id":    testutil.User2ID,
 		"reason":         "Test reason",
+		"version":        99,
 	}
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/report", testutil.User5ID, testutil.JSONBody(t, body))
@@ -66,6 +71,9 @@ func TestReportCreate(t *testing.T) {
 	}
 	if response.CreatedBy != testutil.User5ID {
 		t.Errorf("expected created_by %s, got %s", testutil.User5ID, response.CreatedBy)
+	}
+	if response.Version != 1 {
+		t.Errorf("create should ignore a supplied version and start at 1, got %d", response.Version)
 	}
 }
 
@@ -191,7 +199,7 @@ func TestReportFindByIDHidesInternalNotes(t *testing.T) {
 	report := createReport(t, env, testutil.User5ID)
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/report/"+report.ID.String(), testutil.User2ID,
-		testutil.JSONBody(t, map[string]any{"resolved": true, "public_notes": "handled", "internal_notes": "secret note"}))
+		testutil.JSONBody(t, map[string]any{"resolved": true, "public_notes": "handled", "internal_notes": "secret note", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	for _, userID := range []uuid.UUID{testutil.User5ID, testutil.User2ID, testutil.User1ID} {
@@ -212,17 +220,17 @@ func TestReportUpdatePermissions(t *testing.T) {
 
 	// A regular user who owns the report may read it, but only moderators may resolve it.
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User5ID,
-		testutil.JSONBody(t, map[string]any{"resolved": true}))
+		testutil.JSONBody(t, map[string]any{"resolved": true, "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusForbidden)
 
 	// A regular user who cannot read it gets 404.
 	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User4ID,
-		testutil.JSONBody(t, map[string]any{"resolved": true}))
+		testutil.JSONBody(t, map[string]any{"resolved": true, "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusNotFound)
 
 	// The moderator resolves it.
 	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User2ID,
-		testutil.JSONBody(t, map[string]any{"resolved": true, "public_notes": "done", "internal_notes": "secret"}))
+		testutil.JSONBody(t, map[string]any{"resolved": true, "public_notes": "done", "internal_notes": "secret", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	var resolved reportResponse
@@ -239,11 +247,11 @@ func TestReportUpdatePermissions(t *testing.T) {
 
 	// Once resolved, no further updates are allowed — not even by the resolver or an admin.
 	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User2ID,
-		testutil.JSONBody(t, map[string]any{"internal_notes": "updated by resolver"}))
+		testutil.JSONBody(t, map[string]any{"internal_notes": "updated by resolver", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusForbidden)
 
 	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User1ID,
-		testutil.JSONBody(t, map[string]any{"internal_notes": "updated by admin"}))
+		testutil.JSONBody(t, map[string]any{"internal_notes": "updated by admin", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusForbidden)
 
 	var internalNotes string
@@ -252,6 +260,90 @@ func TestReportUpdatePermissions(t *testing.T) {
 	}
 	if internalNotes != "secret" {
 		t.Errorf("expected notes from the resolution to be unchanged, got %q", internalNotes)
+	}
+}
+
+func TestReportPatchVersionConflict(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	report := createReport(t, env, testutil.User5ID)
+	path := "/v1/report/" + report.ID.String()
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User2ID,
+		testutil.JSONBody(t, map[string]any{"public_notes": "first", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var first reportResponse
+	testutil.DecodeJSON(t, w, &first)
+	if first.Version != 2 {
+		t.Fatalf("expected version 2 after the first update, got %d", first.Version)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User2ID,
+		testutil.JSONBody(t, map[string]any{"public_notes": "second", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusConflict)
+
+	var conflict struct {
+		Error   string `json:"error"`
+		Version int64  `json:"version"`
+	}
+	testutil.DecodeJSON(t, w, &conflict)
+	if conflict.Error != "Version conflict" || conflict.Version != 2 {
+		t.Errorf("expected a version conflict at version 2, got %+v", conflict)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, path, testutil.User5ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var stored reportResponse
+	testutil.DecodeJSON(t, w, &stored)
+	if stored.PublicNotes != "first" || stored.Version != 2 {
+		t.Errorf("the stale update must not be applied: %+v", stored)
+	}
+}
+
+func TestReportPatchRequiresVersion(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	report := createReport(t, env, testutil.User5ID)
+	path := "/v1/report/" + report.ID.String()
+
+	bodies := map[string]map[string]any{
+		"missing":  {"public_notes": "missing version"},
+		"zero":     {"public_notes": "zero version", "version": 0},
+		"negative": {"public_notes": "negative version", "version": -1},
+	}
+
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User2ID, testutil.JSONBody(t, body))
+			testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+		})
+	}
+}
+
+func TestReportPatchIgnoresProtectedFields(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	report := createReport(t, env, testutil.User5ID)
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/report/"+report.ID.String(), testutil.User2ID,
+		testutil.JSONBody(t, map[string]any{
+			"public_notes": "renamed",
+			"version":      1,
+			"ID":           testutil.User1ID,
+			"created_by":   testutil.User2ID,
+			"resolved_by":  testutil.User1ID,
+		}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response reportResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.ID != report.ID {
+		t.Errorf("PATCH must not change the ID: got %s, want %s", response.ID, report.ID)
+	}
+	if response.CreatedBy != testutil.User5ID {
+		t.Errorf("PATCH must not change created_by: got %s, want %s", response.CreatedBy, testutil.User5ID)
 	}
 }
 
@@ -308,7 +400,7 @@ func TestReportListUnresolved(t *testing.T) {
 
 	// Resolving a report removes it from the unresolved list.
 	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/report/"+first.ID.String(), testutil.User2ID,
-		testutil.JSONBody(t, map[string]any{"resolved": true, "public_notes": "done"}))
+		testutil.JSONBody(t, map[string]any{"resolved": true, "public_notes": "done", "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	for _, moderator := range []uuid.UUID{testutil.User2ID, testutil.User1ID} {

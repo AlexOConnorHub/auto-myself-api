@@ -13,7 +13,7 @@ import (
 type VehicleRepository interface {
 	FindIDs(context.Context, uuid.UUID) ([]uuid.UUID, error)
 	FindByID(context.Context, uuid.UUID) (*Vehicle, error)
-	UpdateByID(context.Context, uuid.UUID, *Vehicle) error
+	UpdateByID(context.Context, uuid.UUID, int64, *Vehicle) error
 	DeleteByID(context.Context, uuid.UUID) error
 	Create(context.Context, *Vehicle) error
 	CanRead(context.Context, uuid.UUID, uuid.UUID) (bool, error)
@@ -54,8 +54,8 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Vehicle, erro
 	return helpers.FindByID[Vehicle](ctx, r.database.GetGorm(), id)
 }
 
-func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, vehicle *Vehicle) error {
-	return helpers.UpdateByID[Vehicle](ctx, r.database.GetGorm(), id, vehicle)
+func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, expectedVersion int64, vehicle *Vehicle) error {
+	return helpers.UpdateByIDVersioned[Vehicle](ctx, r.database.GetGorm(), id, expectedVersion, vehicle)
 }
 
 func (r *Repository) DeleteByID(ctx context.Context, id uuid.UUID) error {

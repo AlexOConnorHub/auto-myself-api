@@ -19,6 +19,7 @@ type vehicleResponse struct {
 	Year     int       `json:"year"`
 	Vin      string    `json:"vin"`
 	Lpn      string    `json:"lpn"`
+	Version  int64     `json:"version"`
 }
 
 func vehicleBody(fixture testutil.VehicleFixture) map[string]any {
@@ -54,6 +55,9 @@ func assertVehicle(t *testing.T, got, want vehicleResponse) {
 	if got.Lpn != want.Lpn {
 		t.Errorf("expected lpn %q, got %q", want.Lpn, got.Lpn)
 	}
+	if got.Version != want.Version {
+		t.Errorf("expected version %d, got %d", want.Version, got.Version)
+	}
 }
 
 func expectedVehicle(fixture testutil.VehicleFixture) vehicleResponse {
@@ -67,6 +71,7 @@ func expectedVehicle(fixture testutil.VehicleFixture) vehicleResponse {
 		Year:     fixture.Year,
 		Vin:      fixture.Vin,
 		Lpn:      fixture.Lpn,
+		Version:  1,
 	}
 }
 
@@ -117,6 +122,7 @@ func TestVehiclePost(t *testing.T) {
 		"model":    "TEST-Model",
 		"vin":      "VIN-TEST-1234567890",
 		"lpn":      "LPN-TEST-1234",
+		"version":  99,
 	}
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/vehicle", testutil.User1ID, testutil.JSONBody(t, body))
@@ -134,6 +140,9 @@ func TestVehiclePost(t *testing.T) {
 	testutil.DecodeJSON(t, w, &response)
 	if response.Nickname != "New Vehicle" || response.Year != 2022 || response.Make != "TEST-Make" {
 		t.Errorf("unexpected created vehicle: %+v", response)
+	}
+	if response.Version != 1 {
+		t.Errorf("create should ignore a supplied version and start at 1, got %d", response.Version)
 	}
 }
 
@@ -175,7 +184,7 @@ func TestVehiclePatch(t *testing.T) {
 	newNickname := "MODIFIED " + vehicle.Nickname
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+vehicle.ID.String(), vehicle.OwnerID,
-		testutil.JSONBody(t, map[string]any{"nickname": newNickname}))
+		testutil.JSONBody(t, map[string]any{"nickname": newNickname, "version": 1}))
 	testutil.RequireStatus(t, w, http.StatusOK)
 
 	var response vehicleResponse
@@ -185,6 +194,100 @@ func TestVehiclePatch(t *testing.T) {
 	}
 	if response.Year != vehicle.Year || response.Vin != vehicle.Vin {
 		t.Errorf("PATCH should not clear untouched fields: %+v", response)
+	}
+	if response.Version != 2 {
+		t.Errorf("expected version 2 after the first update, got %d", response.Version)
+	}
+}
+
+func TestVehiclePatchVersionConflict(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	vehicle := testutil.Vehicles[0]
+	path := "/v1/vehicle/" + vehicle.ID.String()
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, vehicle.OwnerID,
+		testutil.JSONBody(t, map[string]any{"nickname": "first", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var first vehicleResponse
+	testutil.DecodeJSON(t, w, &first)
+	if first.Version != 2 {
+		t.Fatalf("expected version 2 after the first update, got %d", first.Version)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, vehicle.OwnerID,
+		testutil.JSONBody(t, map[string]any{"nickname": "second", "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusConflict)
+
+	var conflict struct {
+		Error   string `json:"error"`
+		Version int64  `json:"version"`
+	}
+	testutil.DecodeJSON(t, w, &conflict)
+	if conflict.Error != "Version conflict" || conflict.Version != 2 {
+		t.Errorf("expected a version conflict at version 2, got %+v", conflict)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, path, vehicle.OwnerID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var stored vehicleResponse
+	testutil.DecodeJSON(t, w, &stored)
+	if stored.Nickname != "first" || stored.Version != 2 {
+		t.Errorf("the stale update must not be applied: %+v", stored)
+	}
+}
+
+func TestVehiclePatchRequiresVersion(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	vehicle := testutil.Vehicles[0]
+	path := "/v1/vehicle/" + vehicle.ID.String()
+
+	bodies := map[string]map[string]any{
+		"missing":  {"nickname": "missing version"},
+		"zero":     {"nickname": "zero version", "version": 0},
+		"negative": {"nickname": "negative version", "version": -1},
+	}
+
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, vehicle.OwnerID, testutil.JSONBody(t, body))
+			testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+		})
+	}
+}
+
+func TestVehiclePatchIgnoresProtectedFields(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	vehicle := testutil.Vehicles[0]
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+vehicle.ID.String(), vehicle.OwnerID,
+		testutil.JSONBody(t, map[string]any{
+			"nickname":   "renamed",
+			"version":    1,
+			"id":         testutil.Vehicle2ID,
+			"ID":         testutil.Vehicle2ID,
+			"created_by": testutil.User2ID,
+			"owner_id":   testutil.User2ID,
+		}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var response vehicleResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.ID != vehicle.ID {
+		t.Errorf("PATCH must not change the ID: got %s, want %s", response.ID, vehicle.ID)
+	}
+
+	var createdBy uuid.UUID
+	if err := env.DB.GetGorm().Table("vehicles").Select("created_by").
+		Where("id = ?", vehicle.ID).Row().Scan(&createdBy); err != nil {
+		t.Fatalf("reading created_by: %v", err)
+	}
+	if createdBy != vehicle.OwnerID {
+		t.Errorf("PATCH must not change created_by: got %s, want %s", createdBy, vehicle.OwnerID)
 	}
 }
 
@@ -261,9 +364,10 @@ func TestVehicleWritePermissions(t *testing.T) {
 		for vehicleIndex, access := range accessRow {
 			vehicle := testutil.Vehicles[vehicleIndex]
 			newNickname := "MODIFIED " + vehicle.Nickname
+			version := testutil.CurrentVersion(t, env.DB.GetGorm(), "vehicles", vehicle.ID)
 
 			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+vehicle.ID.String(), user.ID,
-				testutil.JSONBody(t, map[string]any{"nickname": newNickname}))
+				testutil.JSONBody(t, map[string]any{"nickname": newNickname, "version": version}))
 
 			switch {
 			case access == testutil.WRITE:

@@ -26,10 +26,12 @@ CREATE TABLE "users" (
     "username" text NOT NULL,
     "email" text NULL,
     "role" text NOT NULL DEFAULT 'user',
+    "version" bigint NOT NULL DEFAULT 1,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
-    CONSTRAINT "users_pk" PRIMARY KEY ("id")
+    CONSTRAINT "users_pk" PRIMARY KEY ("id"),
+    CONSTRAINT "users_version_positive" CHECK ("version" > 0)
 );
 
 CREATE TRIGGER update_users_updated_at
@@ -126,11 +128,13 @@ CREATE TABLE "vehicles" (
     "lpn" text NULL,
     "nickname" text NULL,
     "created_by" uuid NOT NULL,
+    "version" bigint NOT NULL DEFAULT 1,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
     CONSTRAINT "vehicle_pk" PRIMARY KEY ("id"),
-    CONSTRAINT "vehicles_users" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE
+    CONSTRAINT "vehicles_users" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT "vehicles_version_positive" CHECK ("version" > 0)
 );
 
 CREATE INDEX "vehicles_idx_1" on "vehicles" ("created_by" ASC);
@@ -194,12 +198,14 @@ CREATE TABLE "maintenance_records" (
     "interval_type" text NULL,
     "cost" text NULL,
     "created_by" uuid NOT NULL,
+    "version" bigint NOT NULL DEFAULT 1,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
     CONSTRAINT "maintenance_records_pk" PRIMARY KEY ("id"),
     CONSTRAINT "maintenance_records_vehicles" FOREIGN KEY ("vehicle_id") REFERENCES "vehicles" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
-    CONSTRAINT "maintenance_records_users" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE
+    CONSTRAINT "maintenance_records_users" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT "maintenance_records_version_positive" CHECK ("version" > 0)
 );
 
 CREATE INDEX "maintenance_records_idx_1" on "maintenance_records" ("vehicle_id" ASC);
@@ -237,12 +243,14 @@ CREATE TABLE "reports" (
     "resolved_by" uuid NULL,
     "resolved_at" timestamptz NULL,
     "internal_notes" text NULL,
+    "version" bigint NOT NULL DEFAULT 1,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
     CONSTRAINT "reports_pk" PRIMARY KEY ("id"),
     CONSTRAINT "reports_users_created_by" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
-    CONSTRAINT "reports_users_resolved_by" FOREIGN KEY ("resolved_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE
+    CONSTRAINT "reports_users_resolved_by" FOREIGN KEY ("resolved_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT "reports_version_positive" CHECK ("version" > 0)
 );
 
 CREATE INDEX "reports_idx_1" on "reports" ("created_by" ASC);

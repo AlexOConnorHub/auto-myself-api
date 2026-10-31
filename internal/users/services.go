@@ -52,7 +52,10 @@ func (s *Service) GetUserByID(ctx context.Context, userUUID uuid.UUID) (*User, e
 func (s *Service) UpdateUser(ctx context.Context, user *User) error {
 	currentUser := ctx.Value(helpers.UserCtxKey).(*User)
 
-	if err := s.userRepository.UpdateByID(ctx, currentUser.ID, user); err != nil {
+	if err := s.userRepository.UpdateByID(ctx, currentUser.ID, user.Version, user); err != nil {
+		if errors.Is(err, helpers.ErrVersionConflict) {
+			return err
+		}
 		return fmt.Errorf("updating user %s: %w", currentUser.ID, err)
 	}
 	return nil
