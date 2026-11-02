@@ -16,6 +16,7 @@ type UserHandler interface {
 	GetCurrentUser(*gin.Context)
 	UpdateUser(*gin.Context)
 	GetUserByID(*gin.Context)
+	DeleteAccount(*gin.Context)
 }
 
 type Handler struct {
@@ -65,6 +66,25 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user.UserWeb)
+}
+
+func (h *Handler) DeleteAccount(c *gin.Context) {
+	user := c.MustGet(helpers.UserCtxKey).(*User)
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, user)
+
+	if err := h.userService.DeleteAccount(ctx); err != nil {
+		if errors.Is(err, ErrOwnsVehicles) {
+			slog.Get(c).WarnContext(ctx, "account deletion blocked by owned vehicles", "user_id", user.ID)
+			c.JSON(http.StatusConflict, gin.H{"error": "Delete all vehicles you own before deleting your account"})
+			return
+		}
+		slog.Get(c).ErrorContext(ctx, "failed to delete user account", "user_id", user.ID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	slog.Get(c).InfoContext(ctx, "user account deleted", "user_id", user.ID)
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) GetUserByID(c *gin.Context) {

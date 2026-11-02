@@ -46,7 +46,8 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 const (
-	RoleUser      = "user"
-	RoleModerator = "moderator"
-	RoleAdmin     = "admin"
+	RoleUser        = "user"
+	RoleModerator   = "moderator"
+	RoleAdmin       = "admin"
+	DeletedUsername = "deleted user"
 )

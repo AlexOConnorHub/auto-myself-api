@@ -4,15 +4,21 @@ import (
 	"auto-myself-api/internal/database"
 	"auto-myself-api/internal/helpers"
 	"context"
+	"errors"
+	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
 )
 
+var ErrOwnsVehicles = errors.New("user owns vehicles")
+
 type UserRepository interface {
 	FindByID(context.Context, uuid.UUID) (*User, error)
+	FindByIDIncludingDeleted(context.Context, uuid.UUID) (*User, error)
 	UpdateByID(context.Context, uuid.UUID, int64, *User) error
 	CanRead(context.Context, uuid.UUID, uuid.UUID) (bool, error)
+	DeleteAccount(context.Context, uuid.UUID) error
 }
 
 type Repository struct {
@@ -27,6 +33,50 @@ func NewUserRepository(database *database.Database) *Repository {
 
 func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	return helpers.FindByID[User](ctx, r.database.GetGorm(), id)
+}
+
+func (r *Repository) FindByIDIncludingDeleted(ctx context.Context, id uuid.UUID) (*User, error) {
+	var user User
+	if err := r.database.GetGorm().WithContext(ctx).Unscoped().Where("id = ?", id).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *Repository) DeleteAccount(ctx context.Context, id uuid.UUID) error {
+	return r.database.GetGorm().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var owned int64
+		if err := tx.Table("vehicles").Where("created_by = ? AND deleted_at IS NULL", id).Count(&owned).Error; err != nil {
+			return err
+		}
+		if owned > 0 {
+			return ErrOwnsVehicles
+		}
+
+		result := tx.Unscoped().Model(&User{}).
+			Where("id = ? AND deleted_at IS NULL", id).
+			Updates(map[string]any{
+				"username":   DeletedUsername,
+				"email":      nil,
+				"role":       RoleUser,
+				"deleted_at": time.Now(),
+				"version":    gorm.Expr("version + 1"),
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+
+		if err := tx.Exec("DELETE FROM identities WHERE user_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM refresh_tokens WHERE user_id = ?", id).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (r *Repository) UpdateByID(ctx context.Context, id uuid.UUID, expectedVersion int64, user *User) error {

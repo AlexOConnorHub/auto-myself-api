@@ -13,6 +13,7 @@ import (
 type UserService interface {
 	UpdateUser(context.Context, *User) error
 	GetUserByID(context.Context, uuid.UUID) (*User, error)
+	DeleteAccount(context.Context) error
 }
 
 type Service struct {
@@ -36,7 +37,7 @@ func (s *Service) GetUserByID(ctx context.Context, userUUID uuid.UUID) (*User, e
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	requestedUser, err := s.userRepository.FindByID(ctx, userUUID)
+	requestedUser, err := s.userRepository.FindByIDIncludingDeleted(ctx, userUUID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
@@ -44,7 +45,28 @@ func (s *Service) GetUserByID(ctx context.Context, userUUID uuid.UUID) (*User, e
 		return nil, fmt.Errorf("finding user %s: %w", userUUID, err)
 	}
 
+	if requestedUser.DeletedAt.Valid {
+		requestedUser.Username = DeletedUsername
+		requestedUser.Role = RoleUser
+	}
+
 	return requestedUser, nil
+}
+
+func (s *Service) DeleteAccount(ctx context.Context) error {
+	currentUser := ctx.Value(helpers.UserCtxKey).(*User)
+
+	err := s.userRepository.DeleteAccount(ctx, currentUser.ID)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, ErrOwnsVehicles):
+		return err
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return nil
+	default:
+		return fmt.Errorf("deleting account %s: %w", currentUser.ID, err)
+	}
 }
 
 // UpdateUser applies user to the current user's row and replaces user with the persisted row.

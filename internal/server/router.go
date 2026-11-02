@@ -132,6 +132,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 		{
 			userGroup.GET("", h.User.GetCurrentUser)
 			userGroup.PATCH("", h.User.UpdateUser)
+			userGroup.DELETE("", h.User.DeleteAccount)
 			userGroup.GET("/:uuid", h.User.GetUserByID)
 		}
 
