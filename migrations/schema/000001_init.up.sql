@@ -149,13 +149,15 @@ CREATE TABLE "vehicle_user_access" (
     "vehicle_id" uuid NOT NULL,
     "write_access" boolean NOT NULL DEFAULT false,
     "created_by" uuid NOT NULL,
+    "version" bigint NOT NULL DEFAULT 1,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
     CONSTRAINT "vehicle_user_access_pk" PRIMARY KEY ("id"),
     CONSTRAINT "vehicle_user_access_users" FOREIGN KEY ("user_id") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
     CONSTRAINT "vehicle_user_access_users_created" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
-    CONSTRAINT "vehicles_vehicle_user_access" FOREIGN KEY ("vehicle_id") REFERENCES "vehicles" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE
+    CONSTRAINT "vehicles_vehicle_user_access" FOREIGN KEY ("vehicle_id") REFERENCES "vehicles" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT "vehicle_user_access_version_positive" CHECK ("version" > 0)
 );
 
 CREATE INDEX "vehicle_user_access_idx_1" on "vehicle_user_access" ("vehicle_id" ASC);

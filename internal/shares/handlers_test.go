@@ -374,6 +374,7 @@ type accessResponse struct {
 	ID          uuid.UUID `json:"id"`
 	UserID      uuid.UUID `json:"user_id"`
 	WriteAccess bool      `json:"write_access"`
+	Version     int64     `json:"version"`
 	CreatedAt   string    `json:"created_at"`
 }
 
@@ -857,6 +858,241 @@ func TestShareCreateForAcceptedUser(t *testing.T) {
 	testutil.RequireStatus(t, w, http.StatusConflict)
 }
 
+func TestAccessUpdateByOwner(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	t.Run("promote read only to write", func(t *testing.T) {
+		access := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User3ID)
+		if access.WriteAccess {
+			t.Fatal("fixture precondition: expected User 3 to start read only")
+		}
+
+		w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+access.ID.String(), testutil.User1ID,
+			testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+		testutil.RequireStatus(t, w, http.StatusOK)
+
+		var response accessResponse
+		testutil.DecodeJSON(t, w, &response)
+		if response.ID != access.ID || response.UserID != testutil.User3ID {
+			t.Errorf("unexpected access response identity: %+v", response)
+		}
+		if !response.WriteAccess || response.Version != 2 {
+			t.Errorf("expected write access at version 2, got %+v", response)
+		}
+		assertAccessDTO(t, w.Body.String(), []accessResponse{response})
+
+		writeAccess, version := accessRowState(t, env, access.ID)
+		if !writeAccess || version != 2 {
+			t.Errorf("expected the stored row to gain write access at version 2, got write=%v version=%d", writeAccess, version)
+		}
+	})
+
+	t.Run("demote write to read only", func(t *testing.T) {
+		access := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User2ID)
+		if !access.WriteAccess {
+			t.Fatal("fixture precondition: expected User 2 to start with write access")
+		}
+
+		w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+access.ID.String(), testutil.User1ID,
+			testutil.JSONBody(t, map[string]any{"write_access": false, "version": 1}))
+		testutil.RequireStatus(t, w, http.StatusOK)
+
+		var response accessResponse
+		testutil.DecodeJSON(t, w, &response)
+		if response.WriteAccess || response.Version != 2 {
+			t.Errorf("expected read only at version 2, got %+v", response)
+		}
+
+		// A struct update would skip the zero value and leave write_access true.
+		writeAccess, version := accessRowState(t, env, access.ID)
+		if writeAccess || version != 2 {
+			t.Errorf("expected the stored row to lose write access at version 2, got write=%v version=%d", writeAccess, version)
+		}
+	})
+}
+
+func TestAccessUpdatePermissions(t *testing.T) {
+	env := testutil.SetupTest(t)
+	tx := env.DB.GetGorm()
+
+	for _, access := range testutil.VehicleAccesses {
+		ownerID := ownerOf(t, access.VehicleID)
+		for _, user := range testutil.Users {
+			t.Run(fmt.Sprintf("%s/%s", user.Username, access.ID), func(t *testing.T) {
+				if err := tx.SavePoint("update_access").Error; err != nil {
+					t.Fatalf("creating savepoint: %v", err)
+				}
+
+				wantWrite := !access.WriteAccess
+				w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+access.ID.String(), user.ID,
+					testutil.JSONBody(t, map[string]any{
+						"write_access": wantWrite,
+						"version":      testutil.CurrentVersion(t, tx, "vehicle_user_access", access.ID),
+					}))
+
+				writeAccess, version := accessRowState(t, env, access.ID)
+
+				switch {
+				case user.ID == ownerID:
+					if w.Code != http.StatusOK {
+						t.Errorf("expected 200 for the vehicle owner, got %d (%s)", w.Code, w.Body.String())
+					}
+					if writeAccess != wantWrite || version != 2 {
+						t.Errorf("expected the owner's update to persist write=%v at version 2, got write=%v version=%d", wantWrite, writeAccess, version)
+					}
+				case canReadVehicle(t, user.ID, access.VehicleID):
+					if w.Code != http.StatusForbidden {
+						t.Errorf("expected 403 for a collaborator, got %d (%s)", w.Code, w.Body.String())
+					}
+					if writeAccess != access.WriteAccess || version != 1 {
+						t.Errorf("denied collaborator update changed the row: write=%v version=%d", writeAccess, version)
+					}
+				default:
+					if w.Code != http.StatusNotFound {
+						t.Errorf("expected 404 for a stranger or pending invitee, got %d (%s)", w.Code, w.Body.String())
+					}
+					if writeAccess != access.WriteAccess || version != 1 {
+						t.Errorf("denied stranger update changed the row: write=%v version=%d", writeAccess, version)
+					}
+				}
+
+				if err := tx.RollbackTo("update_access").Error; err != nil {
+					t.Fatalf("rolling back to savepoint: %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestAccessUpdateVersionConflict(t *testing.T) {
+	env := testutil.SetupTest(t)
+	access := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User3ID)
+	path := "/v1/access/" + access.ID.String()
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	var first accessResponse
+	testutil.DecodeJSON(t, w, &first)
+	if !first.WriteAccess || first.Version != 2 {
+		t.Fatalf("expected version 2 with write access after the first update, got %+v", first)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": false, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusConflict)
+
+	var conflict struct {
+		Error   string `json:"error"`
+		Version int64  `json:"version"`
+	}
+	testutil.DecodeJSON(t, w, &conflict)
+	if conflict.Error != "Version conflict" || conflict.Version != 2 {
+		t.Errorf("expected a version conflict at version 2, got %+v", conflict)
+	}
+
+	writeAccess, version := accessRowState(t, env, access.ID)
+	if !writeAccess || version != 2 {
+		t.Errorf("the stale update must not be applied: write=%v version=%d", writeAccess, version)
+	}
+}
+
+func TestAccessUpdateValidation(t *testing.T) {
+	env := testutil.SetupTest(t)
+	access := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User3ID)
+	path := "/v1/access/" + access.ID.String()
+
+	cases := []struct {
+		name string
+		body map[string]any
+	}{
+		{"missing version", map[string]any{"write_access": true}},
+		{"zero version", map[string]any{"write_access": true, "version": 0}},
+		{"negative version", map[string]any{"write_access": true, "version": -1}},
+		{"missing write_access", map[string]any{"version": 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, path, testutil.User1ID, testutil.JSONBody(t, tc.body))
+			testutil.RequireStatus(t, w, http.StatusUnprocessableEntity)
+		})
+	}
+
+	// A false value must bind and be written: a plain bool update DTO or a struct update would drop it.
+	writer := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User2ID)
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+writer.ID.String(), testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": false, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	writeAccess, version := accessRowState(t, env, writer.ID)
+	if writeAccess || version != 2 {
+		t.Errorf("expected write_access false at version 2, got write=%v version=%d", writeAccess, version)
+	}
+}
+
+func TestAccessUpdateNotFoundAndContract(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	missing := testutil.UUID("019d5352-0a33-78e5-9148-59bac3670aff")
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+missing.String(), testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+	var body map[string]string
+	testutil.DecodeJSON(t, w, &body)
+	if body["error"] != "Access not found" {
+		t.Errorf("unexpected missing-access body: %v", body)
+	}
+
+	// A revoked (soft-deleted) row cannot be updated.
+	revoked := testutil.UUID("01978666-50ab-7399-9d85-b3e259e67262")
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+revoked.String(), testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/not-a-uuid", testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusBadRequest)
+	testutil.DecodeJSON(t, w, &body)
+	if body["error"] != "Malformed UUID" {
+		t.Errorf("unexpected malformed-UUID body: %v", body)
+	}
+
+	v4 := testutil.UUID("550e8400-e29b-41d4-a716-446655440000")
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+v4.String(), testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusBadRequest)
+
+	w = testutil.RequestWithBearer(t, env.Router, http.MethodPatch, "/v1/access/"+missing.String(), "",
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusUnauthorized)
+}
+
+func TestAccessUpdateAffectsAuthorization(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	writer := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User2ID)
+	w := testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+writer.ID.String(), testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": false, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", testutil.User2ID,
+		testutil.JSONBody(t, map[string]any{"vehicle_id": testutil.Vehicle2ID}))
+	testutil.RequireStatus(t, w, http.StatusForbidden)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+testutil.Vehicle2ID.String(), testutil.User2ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	reader := accessFixtureFor(t, testutil.Vehicle2ID, testutil.User3ID)
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/access/"+reader.ID.String(), testutil.User1ID,
+		testutil.JSONBody(t, map[string]any{"write_access": true, "version": 1}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/maintenance", testutil.User3ID,
+		testutil.JSONBody(t, map[string]any{"vehicle_id": testutil.Vehicle2ID}))
+	testutil.RequireStatus(t, w, http.StatusCreated)
+}
+
 func decodeAccessEntries(t *testing.T, raw string) []accessResponse {
 	t.Helper()
 
@@ -921,4 +1157,29 @@ func accessFixtureFor(t *testing.T, vehicleID, userID uuid.UUID) testutil.Vehicl
 	}
 	t.Fatalf("access fixture for vehicle %s and user %s not found", vehicleID, userID)
 	return testutil.VehicleAccessFixture{}
+}
+
+func accessRowState(t *testing.T, env *testutil.Env, id uuid.UUID) (bool, int64) {
+	t.Helper()
+
+	var row struct {
+		WriteAccess bool  `gorm:"column:write_access"`
+		Version     int64 `gorm:"column:version"`
+	}
+	if err := env.DB.GetGorm().Table("vehicle_user_access").
+		Select("write_access", "version").Where("id = ?", id).Scan(&row).Error; err != nil {
+		t.Fatalf("loading access row %s: %v", id, err)
+	}
+	return row.WriteAccess, row.Version
+}
+
+func canReadVehicle(t *testing.T, userID, vehicleID uuid.UUID) bool {
+	t.Helper()
+
+	for _, access := range testutil.VehicleAccesses {
+		if access.VehicleID == vehicleID && access.UserID == userID {
+			return true
+		}
+	}
+	return false
 }

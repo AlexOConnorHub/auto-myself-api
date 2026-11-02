@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ShareRepository interface {
@@ -19,6 +20,7 @@ type ShareRepository interface {
 	FindAccessForVehicle(context.Context, uuid.UUID) ([]VehicleUserAccess, error)
 	FindAccessForVehicleAndUser(context.Context, uuid.UUID, uuid.UUID) (*VehicleUserAccess, error)
 	FindAccessByID(context.Context, uuid.UUID) (*VehicleUserAccess, error)
+	UpdateAccessByID(context.Context, uuid.UUID, int64, *VehicleUserAccess) error
 	DeleteAccessByID(context.Context, uuid.UUID) error
 }
 
@@ -81,6 +83,28 @@ func (r *Repository) FindAccessForVehicleAndUser(ctx context.Context, vehicleID,
 
 func (r *Repository) FindAccessByID(ctx context.Context, id uuid.UUID) (*VehicleUserAccess, error) {
 	return helpers.FindByID[VehicleUserAccess](ctx, r.database.GetGorm(), id)
+}
+
+func (r *Repository) UpdateAccessByID(ctx context.Context, id uuid.UUID, expectedVersion int64, access *VehicleUserAccess) error {
+	db := r.database.GetGorm().WithContext(ctx)
+
+	var persisted VehicleUserAccess
+	result := db.Model(&persisted).
+		Clauses(clause.Returning{}).
+		Where("id = ? AND version = ?", id, expectedVersion).
+		Updates(map[string]any{
+			"write_access": access.WriteAccess,
+			"version":      gorm.Expr("version + 1"),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return helpers.VersionConflictFor[VehicleUserAccess](db, id)
+	}
+
+	*access = persisted
+	return nil
 }
 
 func (r *Repository) DeleteAccessByID(ctx context.Context, id uuid.UUID) error {

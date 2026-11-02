@@ -35,6 +35,7 @@ type VehicleUserAccess struct {
 	VehicleUserAccessBase
 	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;not null"`
 	CreatedBy uuid.UUID `json:"created_by" gorm:"type:uuid;not null"`
+	Version   int64     `json:"version" gorm:"not null"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
@@ -45,12 +46,34 @@ func (VehicleUserAccess) TableName() string {
 }
 
 func (v *VehicleUserAccess) BeforeCreate(tx *gorm.DB) (err error) {
-	return helpers.BeforeCreateID(tx, v)
+	if err := helpers.BeforeCreateID(tx, v); err != nil {
+		return err
+	}
+	if v.Version == 0 {
+		v.Version = 1
+	}
+	return nil
+}
+
+type VehicleUserAccessUpdatePost struct {
+	WriteAccess *bool `json:"write_access" binding:"required"`
+	Version     int64 `json:"version" binding:"required,gt=0"`
 }
 
 type VehicleUserAccessWeb struct {
 	ID          uuid.UUID `json:"id"`
 	UserID      uuid.UUID `json:"user_id"`
 	WriteAccess bool      `json:"write_access"`
+	Version     int64     `json:"version"`
 	CreatedAt   string    `json:"created_at"`
+}
+
+func NewVehicleUserAccessWeb(access VehicleUserAccess) VehicleUserAccessWeb {
+	return VehicleUserAccessWeb{
+		ID:          access.ID,
+		UserID:      access.UserID,
+		WriteAccess: access.WriteAccess,
+		Version:     access.Version,
+		CreatedAt:   access.CreatedAt.Format(time.RFC3339),
+	}
 }

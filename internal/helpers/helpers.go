@@ -67,7 +67,7 @@ func UpdateByIDVersioned[T any](ctx context.Context, db *gorm.DB, id uuid.UUID, 
 			return applied.Error
 		}
 		if applied.RowsAffected == 0 {
-			return versionConflict[T](tx, id)
+			return VersionConflictFor[T](tx, id)
 		}
 
 		var persisted T
@@ -86,7 +86,7 @@ func UpdateByIDVersioned[T any](ctx context.Context, db *gorm.DB, id uuid.UUID, 
 	})
 }
 
-func versionConflict[T any](tx *gorm.DB, id uuid.UUID) error {
+func VersionConflictFor[T any](tx *gorm.DB, id uuid.UUID) error {
 	var row struct {
 		Version int64
 	}

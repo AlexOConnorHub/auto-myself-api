@@ -175,6 +175,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 
 		accessGroup := v1.Group("/access")
 		{
+			accessGroup.PATCH("/:uuid", h.Share.UpdateAccessByID)
 			accessGroup.DELETE("/:uuid", h.Share.DeleteAccessByID)
 		}
 

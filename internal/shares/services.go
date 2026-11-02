@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"gorm.io/gorm"
@@ -25,6 +24,7 @@ type ShareService interface {
 	AcceptShare(context.Context, uuid.UUID) (*VehicleUserAccess, error)
 	DeleteShareByID(context.Context, uuid.UUID) error
 	GetAccessForVehicle(context.Context, uuid.UUID) ([]VehicleUserAccessWeb, error)
+	UpdateAccessByID(context.Context, uuid.UUID, *VehicleUserAccess) error
 	DeleteAccessByID(context.Context, uuid.UUID) error
 }
 
@@ -197,14 +197,54 @@ func (s *Service) GetAccessForVehicle(ctx context.Context, vehicleID uuid.UUID) 
 
 	entries := make([]VehicleUserAccessWeb, 0, len(rows))
 	for _, row := range rows {
-		entries = append(entries, VehicleUserAccessWeb{
-			ID:          row.ID,
-			UserID:      row.UserID,
-			WriteAccess: row.WriteAccess,
-			CreatedAt:   row.CreatedAt.Format(time.RFC3339),
-		})
+		entries = append(entries, NewVehicleUserAccessWeb(row))
 	}
 	return entries, nil
+}
+
+func (s *Service) UpdateAccessByID(ctx context.Context, id uuid.UUID, access *VehicleUserAccess) error {
+	user := ctx.Value(helpers.UserCtxKey).(*users.User)
+
+	existing, err := s.shareRepository.FindAccessByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return fmt.Errorf("finding access %s: %w", id, err)
+	}
+
+	vehicle, err := s.vehicleRepository.FindByID(ctx, existing.VehicleID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return fmt.Errorf("finding vehicle %s: %w", existing.VehicleID, err)
+	}
+
+	if vehicle.CreatedBy != user.ID {
+		canRead, readErr := s.vehicleRepository.CanRead(ctx, existing.VehicleID, user.ID)
+		if readErr != nil {
+			return fmt.Errorf("checking read access to vehicle %s: %w", existing.VehicleID, readErr)
+		}
+		if canRead {
+			return helpers.ErrAccessDenied
+		}
+		return gorm.ErrRecordNotFound
+	}
+
+	if err := s.shareRepository.UpdateAccessByID(ctx, id, access.Version, access); err != nil {
+		var conflict *helpers.VersionConflictError
+		switch {
+		case errors.As(err, &conflict):
+			return err
+		case errors.Is(err, helpers.ErrVersionConflict):
+			// The row was revoked between the read and the write.
+			return gorm.ErrRecordNotFound
+		default:
+			return fmt.Errorf("updating access %s: %w", id, err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) DeleteAccessByID(ctx context.Context, accessID uuid.UUID) error {

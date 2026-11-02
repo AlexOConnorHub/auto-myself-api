@@ -20,6 +20,7 @@ type ShareHandler interface {
 	AcceptShare(*gin.Context)
 	DeleteShareByID(*gin.Context)
 	GetVehicleAccess(*gin.Context)
+	UpdateAccessByID(*gin.Context)
 	DeleteAccessByID(*gin.Context)
 }
 
@@ -172,6 +173,51 @@ func (h *Handler) GetVehicleAccess(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, accesses)
+}
+
+func (h *Handler) UpdateAccessByID(c *gin.Context) {
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, c.MustGet(helpers.UserCtxKey).(*users.User))
+	accessUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
+
+	var input VehicleUserAccessUpdatePost
+	if err := c.ShouldBindJSON(&input); err != nil {
+		slog.Get(c).WarnContext(ctx, "invalid access body", "error", err)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	access := VehicleUserAccess{
+		VehicleUserAccessBase: VehicleUserAccessBase{WriteAccess: *input.WriteAccess},
+		Version:               input.Version,
+	}
+
+	err := h.shareService.UpdateAccessByID(ctx, accessUUID, &access)
+	switch {
+	case err == nil:
+	case errors.Is(err, helpers.ErrVersionConflict):
+		body := gin.H{"error": "Version conflict"}
+		var conflict *helpers.VersionConflictError
+		if errors.As(err, &conflict) {
+			body["version"] = conflict.CurrentVersion
+		}
+		slog.Get(c).WarnContext(ctx, "version conflict updating access", "access_id", accessUUID)
+		c.JSON(http.StatusConflict, body)
+		return
+	case errors.Is(err, helpers.ErrAccessDenied):
+		slog.Get(c).WarnContext(ctx, "access denied updating access", "access_id", accessUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Get(c).InfoContext(ctx, "access not found", "access_id", accessUUID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Access not found"})
+		return
+	default:
+		slog.Get(c).ErrorContext(ctx, "failed to update access", "access_id", accessUUID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, NewVehicleUserAccessWeb(access))
 }
 
 func (h *Handler) DeleteAccessByID(c *gin.Context) {
