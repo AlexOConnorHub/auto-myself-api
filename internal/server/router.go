@@ -5,6 +5,7 @@ import (
 	"auto-myself-api/internal/database"
 	"auto-myself-api/internal/export"
 	"auto-myself-api/internal/files"
+	"auto-myself-api/internal/health"
 	"auto-myself-api/internal/maintenance"
 	"auto-myself-api/internal/middleware"
 	"auto-myself-api/internal/reports"
@@ -33,6 +34,7 @@ type Handlers struct {
 	Share       *shares.Handler
 	Report      *reports.Handler
 	Export      *export.Handler
+	Health      *health.Handler
 }
 
 func Build(d Dependencies) *Handlers {
@@ -68,6 +70,8 @@ func Build(d Dependencies) *Handlers {
 	exportService := export.NewService(authRepository, vehicleRepository, maintenanceRepository, fileRepository, reportRepository, d.Storage)
 	exportHandler := export.NewExportHandler(exportService)
 
+	healthHandler := health.NewHandler(d.Database)
+
 	return &Handlers{
 		Auth:        authHandler,
 		User:        userHandler,
@@ -77,6 +81,7 @@ func Build(d Dependencies) *Handlers {
 		Share:       shareHandler,
 		Report:      reportHandler,
 		Export:      exportHandler,
+		Health:      healthHandler,
 	}
 }
 
@@ -90,6 +95,9 @@ func NewEngine() *gin.Engine {
 }
 
 func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
+	r.GET("/healthz", h.Health.Liveness)
+	r.GET("/readyz", h.Health.Readiness)
+
 	isRelease := gin.Mode() == gin.ReleaseMode
 
 	var timeoutMiddleware gin.HandlerFunc

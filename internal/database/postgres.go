@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -42,6 +43,24 @@ func (d *Database) GetGorm() *gorm.DB {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.gorm
+}
+
+func (d *Database) Ping(ctx context.Context) error {
+	if d == nil {
+		return errors.New("database is not configured")
+	}
+
+	d.mu.RLock()
+	db, gormDB := d.db, d.gorm
+	d.mu.RUnlock()
+
+	if db != nil {
+		return db.PingContext(ctx)
+	}
+	if gormDB == nil {
+		return errors.New("database is not configured")
+	}
+	return gormDB.WithContext(ctx).Exec("SELECT 1").Error
 }
 
 func (d *Database) Replace(newDB *sql.DB) (*sql.DB, error) {
