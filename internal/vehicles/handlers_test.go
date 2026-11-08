@@ -3,6 +3,7 @@ package vehicles_test
 import (
 	"auto-myself-api/internal/testutil"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ type vehicleResponse struct {
 	Vin      string    `json:"vin"`
 	Lpn      string    `json:"lpn"`
 	Version  int64     `json:"version"`
+	OwnedBy  uuid.UUID `json:"owned_by"`
 }
 
 func vehicleBody(fixture testutil.VehicleFixture) map[string]any {
@@ -58,6 +60,9 @@ func assertVehicle(t *testing.T, got, want vehicleResponse) {
 	if got.Version != want.Version {
 		t.Errorf("expected version %d, got %d", want.Version, got.Version)
 	}
+	if got.OwnedBy != want.OwnedBy {
+		t.Errorf("expected owned_by %s, got %s", want.OwnedBy, got.OwnedBy)
+	}
 }
 
 func expectedVehicle(fixture testutil.VehicleFixture) vehicleResponse {
@@ -72,6 +77,7 @@ func expectedVehicle(fixture testutil.VehicleFixture) vehicleResponse {
 		Vin:      fixture.Vin,
 		Lpn:      fixture.Lpn,
 		Version:  1,
+		OwnedBy:  fixture.OwnerID,
 	}
 }
 
@@ -123,6 +129,7 @@ func TestVehiclePost(t *testing.T) {
 		"vin":      "VIN-TEST-1234567890",
 		"lpn":      "LPN-TEST-1234",
 		"version":  99,
+		"owned_by": testutil.User2ID,
 	}
 
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPost, "/v1/vehicle", testutil.User1ID, testutil.JSONBody(t, body))
@@ -143,6 +150,9 @@ func TestVehiclePost(t *testing.T) {
 	}
 	if response.Version != 1 {
 		t.Errorf("create should ignore a supplied version and start at 1, got %d", response.Version)
+	}
+	if response.OwnedBy != testutil.User1ID {
+		t.Errorf("create should set owned_by to the caller, got %s", response.OwnedBy)
 	}
 }
 
@@ -271,6 +281,7 @@ func TestVehiclePatchIgnoresProtectedFields(t *testing.T) {
 			"id":         testutil.Vehicle2ID,
 			"ID":         testutil.Vehicle2ID,
 			"created_by": testutil.User2ID,
+			"owned_by":   testutil.User2ID,
 			"owner_id":   testutil.User2ID,
 		}))
 	testutil.RequireStatus(t, w, http.StatusOK)
@@ -280,14 +291,23 @@ func TestVehiclePatchIgnoresProtectedFields(t *testing.T) {
 	if response.ID != vehicle.ID {
 		t.Errorf("PATCH must not change the ID: got %s, want %s", response.ID, vehicle.ID)
 	}
-
-	var createdBy uuid.UUID
-	if err := env.DB.GetGorm().Table("vehicles").Select("created_by").
-		Where("id = ?", vehicle.ID).Row().Scan(&createdBy); err != nil {
-		t.Fatalf("reading created_by: %v", err)
+	if response.OwnedBy != vehicle.OwnerID {
+		t.Errorf("PATCH must not change owned_by: got %s, want %s", response.OwnedBy, vehicle.OwnerID)
 	}
-	if createdBy != vehicle.OwnerID {
-		t.Errorf("PATCH must not change created_by: got %s, want %s", createdBy, vehicle.OwnerID)
+
+	var stored struct {
+		CreatedBy uuid.UUID
+		OwnedBy   uuid.UUID
+	}
+	if err := env.DB.GetGorm().Table("vehicles").Select("created_by, owned_by").
+		Where("id = ?", vehicle.ID).Take(&stored).Error; err != nil {
+		t.Fatalf("reading vehicle audit fields: %v", err)
+	}
+	if stored.CreatedBy != vehicle.OwnerID {
+		t.Errorf("PATCH must not change created_by: got %s, want %s", stored.CreatedBy, vehicle.OwnerID)
+	}
+	if stored.OwnedBy != vehicle.OwnerID {
+		t.Errorf("PATCH must not change owned_by: got %s, want %s", stored.OwnedBy, vehicle.OwnerID)
 	}
 }
 
@@ -428,4 +448,51 @@ func TestVehicleDeletePermissions(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestVehiclePermissionsFollowOwnership(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	vehicle := testutil.Vehicles[0]
+	if err := env.DB.GetGorm().Table("vehicles").
+		Where("id = ?", vehicle.ID).Update("owned_by", testutil.User3ID).Error; err != nil {
+		t.Fatalf("transferring vehicle ownership: %v", err)
+	}
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle", testutil.User3ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+	var ids []uuid.UUID
+	testutil.DecodeJSON(t, w, &ids)
+	if !slices.Contains(ids, vehicle.ID) {
+		t.Errorf("expected the new owner's list to contain %s, got %v", vehicle.ID, ids)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+vehicle.ID.String(), testutil.User3ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+	var response vehicleResponse
+	testutil.DecodeJSON(t, w, &response)
+	if response.OwnedBy != testutil.User3ID {
+		t.Errorf("expected owned_by %s, got %s", testutil.User3ID, response.OwnedBy)
+	}
+
+	version := testutil.CurrentVersion(t, env.DB.GetGorm(), "vehicles", vehicle.ID)
+	w = testutil.RequestAsUser(t, env.Router, http.MethodPatch, "/v1/vehicle/"+vehicle.ID.String(), testutil.User3ID,
+		testutil.JSONBody(t, map[string]any{"nickname": "Transferred", "version": version}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle/"+vehicle.ID.String(), testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+	w = testutil.RequestAsUser(t, env.Router, http.MethodDelete, "/v1/vehicle/"+vehicle.ID.String(), testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/vehicle", testutil.User1ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+	ids = nil
+	testutil.DecodeJSON(t, w, &ids)
+	if slices.Contains(ids, vehicle.ID) {
+		t.Errorf("expected the creator's list to exclude %s, got %v", vehicle.ID, ids)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodDelete, "/v1/vehicle/"+vehicle.ID.String(), testutil.User3ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNoContent)
 }

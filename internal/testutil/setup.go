@@ -40,7 +40,7 @@ var (
 	baseGorm *gorm.DB
 )
 
-func SetupTest(t *testing.T) *Env {
+func SetupTest(t *testing.T, opts ...server.RouteOption) *Env {
 	t.Helper()
 
 	loadEnv()
@@ -83,7 +83,7 @@ func SetupTest(t *testing.T) *Env {
 			Apple:  appleAuth,
 		},
 	}
-	server.RegisterRoutes(router, server.Build(deps), deps)
+	server.RegisterRoutes(router, server.Build(deps), deps, opts...)
 
 	return &Env{
 		Router:     router,

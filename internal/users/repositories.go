@@ -46,7 +46,7 @@ func (r *Repository) FindByIDIncludingDeleted(ctx context.Context, id uuid.UUID)
 func (r *Repository) DeleteAccount(ctx context.Context, id uuid.UUID) error {
 	return r.database.GetGorm().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var owned int64
-		if err := tx.Table("vehicles").Where("created_by = ? AND deleted_at IS NULL", id).Count(&owned).Error; err != nil {
+		if err := tx.Table("vehicles").Where("owned_by = ? AND deleted_at IS NULL", id).Count(&owned).Error; err != nil {
 			return err
 		}
 		if owned > 0 {
@@ -99,7 +99,7 @@ func (r *Repository) CanRead(ctx context.Context, currentUser uuid.UUID, targetU
 	LEFT JOIN vehicle_user_access A ON V.id = A.vehicle_id AND A.deleted_at IS NULL
 	WHERE V.deleted_at IS NULL
 		AND (
-			( V.created_by = ? AND A.user_id = ? )
+			( V.owned_by = ? AND A.user_id = ? )
 			OR
 			(
 				V.id IN (
@@ -107,13 +107,13 @@ func (r *Repository) CanRead(ctx context.Context, currentUser uuid.UUID, targetU
 					FROM vehicles V_INNER
 					LEFT JOIN vehicle_user_access A_INNER ON V_INNER.id = A_INNER.vehicle_id AND A_INNER.deleted_at IS NULL
 					WHERE V_INNER.deleted_at IS NULL
-						AND ( A_INNER.user_id = ? OR V_INNER.created_by = ? )
+						AND ( A_INNER.user_id = ? OR V_INNER.owned_by = ? )
 				)
 				AND
 				(
 					( A.user_id = ? AND A.write_access = true )
 					OR
-					V.created_by = ?
+					V.owned_by = ?
 				)
 			)
 		)

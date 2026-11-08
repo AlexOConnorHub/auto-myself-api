@@ -132,6 +132,23 @@ func TestDeleteAccountRejectsOwnedVehicles(t *testing.T) {
 	}
 }
 
+func TestDeleteAccountOwnershipFollowsOwnedBy(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	if err := env.DB.GetGorm().Table("vehicles").
+		Where("id = ?", testutil.Vehicle4ID).Update("owned_by", testutil.User5ID).Error; err != nil {
+		t.Fatalf("transferring vehicle ownership: %v", err)
+	}
+
+	login := devLogin(t, env, testutil.User5ID)
+	w := testutil.RequestWithBearer(t, env.Router, http.MethodDelete, "/v1/user", login.Authentication, nil)
+	testutil.RequireStatus(t, w, http.StatusConflict)
+
+	login = devLogin(t, env, testutil.User6ID)
+	w = testutil.RequestWithBearer(t, env.Router, http.MethodDelete, "/v1/user", login.Authentication, nil)
+	testutil.RequireStatus(t, w, http.StatusNoContent)
+}
+
 func TestDeleteAccountAnonymizesAndHardDeletesAuthArtifacts(t *testing.T) {
 	env := testutil.SetupTest(t)
 

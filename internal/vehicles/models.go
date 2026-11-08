@@ -27,6 +27,7 @@ type VehicleWeb struct {
 	VehiclePost
 	ID      uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	Version int64     `json:"version" gorm:"not null"`
+	OwnedBy uuid.UUID `json:"owned_by" gorm:"type:uuid;not null"`
 }
 
 type Vehicle struct {

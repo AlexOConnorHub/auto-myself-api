@@ -247,3 +247,19 @@ func TestUserVisibilityEndsWhenVehicleIsDeleted(t *testing.T) {
 	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User2ID.String(), testutil.User1ID, nil)
 	testutil.RequireStatus(t, w, http.StatusNotFound)
 }
+
+func TestUserVisibilityFollowsVehicleOwnership(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	w := testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User1ID.String(), testutil.User2ID, nil)
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	if err := env.DB.GetGorm().Table("vehicles").
+		Where("id = ?", testutil.Vehicle2ID).
+		Update("owned_by", testutil.User3ID).Error; err != nil {
+		t.Fatalf("transferring vehicle ownership: %v", err)
+	}
+
+	w = testutil.RequestAsUser(t, env.Router, http.MethodGet, "/v1/user/"+testutil.User1ID.String(), testutil.User2ID, nil)
+	testutil.RequireStatus(t, w, http.StatusNotFound)
+}

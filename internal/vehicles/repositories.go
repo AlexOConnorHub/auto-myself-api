@@ -36,7 +36,7 @@ func (r *Repository) FindIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID
 	err := gorm.G[Vehicle](r.database.GetGorm()).Raw(`
 	SELECT id
 	FROM vehicles
-	WHERE created_by = $1 AND deleted_at IS NULL
+	WHERE owned_by = $1 AND deleted_at IS NULL
 	UNION
 	SELECT vehicle_id
 	FROM vehicle_user_access
@@ -93,7 +93,7 @@ func (r *Repository) CanRead(ctx context.Context, vehicleID uuid.UUID, userID uu
 	err := gorm.G[Vehicle](r.database.GetGorm()).Raw(`
 	SELECT true AS can_read
 	FROM vehicles V
-	WHERE V.id = $1 AND V.created_by = $2 AND V.deleted_at IS NULL
+	WHERE V.id = $1 AND V.owned_by = $2 AND V.deleted_at IS NULL
 	UNION
 	SELECT true AS can_read
 	FROM vehicle_user_access A
@@ -129,7 +129,7 @@ func (r *Repository) CanWrite(ctx context.Context, vehicleID uuid.UUID, userID u
 	err := gorm.G[Vehicle](r.database.GetGorm()).Raw(`
 	SELECT true AS write_access
 	FROM vehicles V
-	WHERE V.id = $1 AND V.created_by = $2 AND V.deleted_at IS NULL
+	WHERE V.id = $1 AND V.owned_by = $2 AND V.deleted_at IS NULL
 	UNION
 	SELECT A.write_access
 	FROM vehicle_user_access A

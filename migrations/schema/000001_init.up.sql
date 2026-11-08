@@ -128,16 +128,20 @@ CREATE TABLE "vehicles" (
     "lpn" text NULL,
     "nickname" text NULL,
     "created_by" uuid NOT NULL,
+    "owned_by" uuid NOT NULL,
     "version" bigint NOT NULL DEFAULT 1,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now(),
     "deleted_at" timestamptz NULL,
     CONSTRAINT "vehicle_pk" PRIMARY KEY ("id"),
     CONSTRAINT "vehicles_users" FOREIGN KEY ("created_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT "vehicles_users_owned_by" FOREIGN KEY ("owned_by") REFERENCES "users" ("id") NOT DEFERRABLE INITIALLY IMMEDIATE,
     CONSTRAINT "vehicles_version_positive" CHECK ("version" > 0)
 );
 
 CREATE INDEX "vehicles_idx_1" on "vehicles" ("created_by" ASC);
+
+CREATE INDEX "vehicles_idx_2" on "vehicles" ("owned_by" ASC);
 
 CREATE TRIGGER update_vehicles_updated_at
     BEFORE UPDATE ON "vehicles"

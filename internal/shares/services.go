@@ -85,7 +85,7 @@ func (s *Service) CreateShare(ctx context.Context, share *VehicleUserAccessPendi
 		return fmt.Errorf("finding vehicle %s: %w", share.VehicleID, err)
 	}
 
-	if vehicle.CreatedBy != user.ID {
+	if vehicle.OwnedBy != user.ID {
 		canRead, readErr := s.vehicleRepository.CanRead(ctx, share.VehicleID, user.ID)
 		if readErr != nil {
 			return fmt.Errorf("checking read access to vehicle %s: %w", share.VehicleID, readErr)
@@ -179,7 +179,7 @@ func (s *Service) GetAccessForVehicle(ctx context.Context, vehicleID uuid.UUID) 
 	}
 
 	var rows []VehicleUserAccess
-	if vehicle.CreatedBy == user.ID {
+	if vehicle.OwnedBy == user.ID {
 		rows, err = s.shareRepository.FindAccessForVehicle(ctx, vehicleID)
 		if err != nil {
 			return nil, fmt.Errorf("finding access for vehicle %s: %w", vehicleID, err)
@@ -221,7 +221,7 @@ func (s *Service) UpdateAccessByID(ctx context.Context, id uuid.UUID, access *Ve
 		return fmt.Errorf("finding vehicle %s: %w", existing.VehicleID, err)
 	}
 
-	if vehicle.CreatedBy != user.ID {
+	if vehicle.OwnedBy != user.ID {
 		canRead, readErr := s.vehicleRepository.CanRead(ctx, existing.VehicleID, user.ID)
 		if readErr != nil {
 			return fmt.Errorf("checking read access to vehicle %s: %w", existing.VehicleID, readErr)
@@ -266,7 +266,7 @@ func (s *Service) DeleteAccessByID(ctx context.Context, accessID uuid.UUID) erro
 		return fmt.Errorf("finding vehicle %s: %w", access.VehicleID, err)
 	}
 
-	if vehicle.CreatedBy != user.ID && access.UserID != user.ID {
+	if vehicle.OwnedBy != user.ID && access.UserID != user.ID {
 		return gorm.ErrRecordNotFound
 	}
 

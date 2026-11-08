@@ -102,7 +102,7 @@ func (s *Service) DeleteByID(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("finding vehicle %s: %w", id, err)
 	}
 
-	if vehicle.CreatedBy != user.ID {
+	if vehicle.OwnedBy != user.ID {
 		canRead, readErr := s.vehicleRepository.CanRead(ctx, id, user.ID)
 		if readErr != nil {
 			return fmt.Errorf("checking read access to vehicle %s: %w", id, readErr)
@@ -122,6 +122,7 @@ func (s *Service) DeleteByID(ctx context.Context, id uuid.UUID) error {
 func (s *Service) Create(ctx context.Context, vehicle *Vehicle) error {
 	user := ctx.Value(helpers.UserCtxKey).(*users.User)
 	vehicle.CreatedBy = user.ID
+	vehicle.OwnedBy = user.ID
 
 	if err := s.vehicleRepository.Create(ctx, vehicle); err != nil {
 		return fmt.Errorf("creating vehicle: %w", err)
