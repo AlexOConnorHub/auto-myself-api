@@ -34,6 +34,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	req.RemoteAddr = "127.0.0.1:1234"
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+	assert.JSONEq(t, `{"error":"Rate limit exceeded"}`, w.Body.String())
 
 	time.Sleep(2 * time.Second)
 
@@ -72,6 +73,7 @@ func TestUserRateLimitMiddleware(t *testing.T) {
 		if w.Code == http.StatusTooManyRequests {
 			limited = true
 			assert.NotEmpty(t, w.Header().Get("Retry-After"))
+			assert.JSONEq(t, `{"error":"Rate limit exceeded"}`, w.Body.String())
 			break
 		}
 		assert.Equal(t, http.StatusOK, w.Code)

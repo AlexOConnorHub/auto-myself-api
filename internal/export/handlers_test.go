@@ -79,6 +79,21 @@ func TestExportOwnedAndSharedVehicles(t *testing.T) {
 	}
 }
 
+func TestExportIncludesReadme(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	entries := exportArchive(t, env, testutil.User1ID)
+	readme, exists := entries["README.md"]
+	if !exists {
+		t.Fatalf("expected README.md at the archive root; entries: %s", strings.Join(entryNames(entries), ", "))
+	}
+	for _, want := range []string{"24 hours", "signed_url", "maintenance_records.json"} {
+		if !strings.Contains(string(readme), want) {
+			t.Errorf("README.md does not mention %q", want)
+		}
+	}
+}
+
 func TestExportSharedVehicleForCollaborators(t *testing.T) {
 	env := testutil.SetupTest(t)
 
@@ -290,7 +305,7 @@ func TestExportExcludesSensitiveData(t *testing.T) {
 	for name, data := range entries {
 		raw.WriteString(name)
 		raw.Write(data)
-		if name != "user.json" && !strings.HasPrefix(name, "vehicles/") && !strings.HasPrefix(name, "reports/") {
+		if name != "README.md" && name != "user.json" && !strings.HasPrefix(name, "vehicles/") && !strings.HasPrefix(name, "reports/") {
 			t.Errorf("unexpected archive entry %s", name)
 		}
 	}

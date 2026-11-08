@@ -3,6 +3,7 @@ package export
 import (
 	"archive/zip"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,6 +15,9 @@ import (
 	"github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed README.md
+var exportReadme []byte
 
 type ExportHandler interface {
 	Download(*gin.Context)
@@ -54,6 +58,10 @@ func (h *Handler) Download(c *gin.Context) {
 }
 
 func writeArchive(zipWriter *zip.Writer, archive *Archive) error {
+	if err := writeFile(zipWriter, "README.md", exportReadme); err != nil {
+		return err
+	}
+
 	if err := writeJSON(zipWriter, "user.json", archive.User); err != nil {
 		return err
 	}
@@ -110,6 +118,17 @@ func writeJSON(zipWriter *zip.Writer, name string, value any) error {
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(value); err != nil {
 		return fmt.Errorf("encoding %s: %w", name, err)
+	}
+	return nil
+}
+
+func writeFile(zipWriter *zip.Writer, name string, data []byte) error {
+	writer, err := zipWriter.Create(name)
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", name, err)
+	}
+	if _, err := writer.Write(data); err != nil {
+		return fmt.Errorf("writing %s: %w", name, err)
 	}
 	return nil
 }

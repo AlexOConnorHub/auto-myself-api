@@ -204,6 +204,14 @@ func TestFileUploadTooLarge(t *testing.T) {
 		"/v1/file/maintenance/"+testutil.Maintenances[0].ID.String(), testutil.User1ID, bytes.NewReader(data))
 	testutil.RequireStatus(t, w, http.StatusRequestEntityTooLarge)
 
+	var response struct {
+		Error string `json:"error"`
+	}
+	testutil.DecodeJSON(t, w, &response)
+	if response.Error != "File too large" {
+		t.Errorf("expected the generic 413 message, got %q", response.Error)
+	}
+
 	if env.Storage.Len() != 0 {
 		t.Errorf("expected no stored objects after a rejected upload")
 	}
@@ -216,6 +224,14 @@ func TestFileUploadStorageFailure(t *testing.T) {
 	w := testutil.RequestAsUser(t, env.Router, http.MethodPost,
 		"/v1/file/maintenance/"+testutil.Maintenances[0].ID.String(), testutil.User1ID, bytes.NewReader([]byte("data")))
 	testutil.RequireStatus(t, w, http.StatusInternalServerError)
+
+	var response struct {
+		Error string `json:"error"`
+	}
+	testutil.DecodeJSON(t, w, &response)
+	if response.Error != "Internal server error" {
+		t.Errorf("expected the generic 500 message, got %q", response.Error)
+	}
 
 	env.Storage.FailUpload = false
 	w = testutil.RequestAsUser(t, env.Router, http.MethodGet,
