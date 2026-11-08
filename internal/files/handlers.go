@@ -2,6 +2,7 @@ package files
 
 import (
 	"auto-myself-api/internal/helpers"
+	"auto-myself-api/internal/httperr"
 	"auto-myself-api/internal/users"
 	"context"
 	"errors"
@@ -63,9 +64,18 @@ func (h *Handler) CreateForRecord(c *gin.Context) {
 	recordType := c.Param("record_type")
 	recordUUID := c.MustGet(helpers.UUIDParamKey).(uuid.UUID)
 
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxUploadBytes)
-	data, err := io.ReadAll(c.Request.Body)
+	body := http.MaxBytesReader(c.Writer, c.Request.Body, MaxUploadBytes)
+	c.Request.Body = body
+
+	data, err := readUploadBody(ctx, body)
 	if err != nil {
+		if ctx.Err() != nil {
+			// The timeout middleware may race its own timer: when the handler finishes first
+			// it flushes the buffer instead of writing its 408. Writing the same body here
+			// makes either branch return the canonical 408 instead of an empty 200.
+			httperr.WriteRequestTimeout(c)
+			return
+		}
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			slog.Get(c).WarnContext(ctx, "file upload too large", "record_type", recordType, "record_id", recordUUID)
@@ -74,6 +84,11 @@ func (h *Handler) CreateForRecord(c *gin.Context) {
 		}
 		slog.Get(c).WarnContext(ctx, "failed to read upload body", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file data"})
+		return
+	}
+
+	if ctx.Err() != nil {
+		httperr.WriteRequestTimeout(c)
 		return
 	}
 
@@ -125,4 +140,25 @@ func (h *Handler) DeleteByID(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+type uploadReadResult struct {
+	data []byte
+	err  error
+}
+
+func readUploadBody(ctx context.Context, body io.ReadCloser) ([]byte, error) {
+	done := make(chan uploadReadResult, 1)
+	go func() {
+		data, err := io.ReadAll(body)
+		done <- uploadReadResult{data: data, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		go func() { _ = body.Close() }()
+		return nil, ctx.Err()
+	case result := <-done:
+		return result.data, result.err
+	}
 }

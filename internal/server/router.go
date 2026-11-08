@@ -1,11 +1,14 @@
 package server
 
 import (
+	"time"
+
 	"auto-myself-api/internal/auth"
 	"auto-myself-api/internal/database"
 	"auto-myself-api/internal/export"
 	"auto-myself-api/internal/files"
 	"auto-myself-api/internal/health"
+	"auto-myself-api/internal/httperr"
 	"auto-myself-api/internal/maintenance"
 	"auto-myself-api/internal/middleware"
 	"auto-myself-api/internal/reports"
@@ -94,15 +97,70 @@ func NewEngine() *gin.Engine {
 	return r
 }
 
-func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
+const (
+	defaultRequestTimeout = 5 * time.Second
+	uploadRequestTimeout  = 2 * time.Minute
+)
+
+type timeoutDurations struct {
+	defaultTimeout time.Duration
+	uploadTimeout  time.Duration
+}
+
+type routeConfig struct {
+	timeouts *timeoutDurations
+}
+
+type RouteOption func(*routeConfig)
+
+func WithTimeouts(defaultTimeout, uploadTimeout time.Duration) RouteOption {
+	if defaultTimeout <= 0 || uploadTimeout <= 0 {
+		panic("server: WithTimeouts requires positive durations")
+	}
+	return func(c *routeConfig) {
+		c.timeouts = &timeoutDurations{
+			defaultTimeout: defaultTimeout,
+			uploadTimeout:  uploadTimeout,
+		}
+	}
+}
+
+func newTimeoutMiddleware(d time.Duration) gin.HandlerFunc {
+	return timeout.New(
+		timeout.WithTimeout(d),
+		timeout.WithResponse(httperr.WriteRequestTimeout),
+	)
+}
+
+func resolveTimeouts(mode string, override *timeoutDurations) *timeoutDurations {
+	if override != nil {
+		return override
+	}
+	if mode == gin.ReleaseMode {
+		return &timeoutDurations{
+			defaultTimeout: defaultRequestTimeout,
+			uploadTimeout:  uploadRequestTimeout,
+		}
+	}
+	return nil
+}
+
+func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies, opts ...RouteOption) {
 	r.GET("/healthz", h.Health.Liveness)
 	r.GET("/readyz", h.Health.Readiness)
 
+	cfg := routeConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	timeouts := resolveTimeouts(gin.Mode(), cfg.timeouts)
 	isRelease := gin.Mode() == gin.ReleaseMode
 
-	var timeoutMiddleware gin.HandlerFunc
-	if isRelease {
-		timeoutMiddleware = timeout.New()
+	var defaultTimeoutMiddleware, uploadTimeoutMiddleware gin.HandlerFunc
+	if timeouts != nil {
+		defaultTimeoutMiddleware = newTimeoutMiddleware(timeouts.defaultTimeout)
+		uploadTimeoutMiddleware = newTimeoutMiddleware(timeouts.uploadTimeout)
 	}
 
 	authGroup := r.Group("/auth")
@@ -110,8 +168,8 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 		c.Header("Cache-Control", "no-store")
 		c.Next()
 	})
-	if timeoutMiddleware != nil {
-		authGroup.Use(timeoutMiddleware)
+	if defaultTimeoutMiddleware != nil {
+		authGroup.Use(defaultTimeoutMiddleware)
 	}
 	if isRelease {
 		authGroup.Use(middleware.RateLimitMiddleware())
@@ -131,8 +189,8 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 	}
 
 	v1 := r.Group("/v1")
-	if timeoutMiddleware != nil {
-		v1.Use(timeoutMiddleware)
+	if defaultTimeoutMiddleware != nil {
+		v1.Use(defaultTimeoutMiddleware)
 	}
 	v1.Use(v1Middleware...)
 	{
@@ -168,7 +226,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 		fileGroup := v1.Group("/file")
 		{
 			fileGroup.GET("/:record_type/:uuid", h.File.GetForRecord)
-			fileGroup.POST("/:record_type/:uuid", h.File.CreateForRecord)
+			// POST is registered on the upload group below
 			fileGroup.DELETE("/:uuid", h.File.DeleteByID)
 		}
 
@@ -197,6 +255,13 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies) {
 			reportGroup.PATCH("/:uuid", h.Report.UpdateByID)
 		}
 	}
+
+	uploadGroup := r.Group("/v1")
+	if uploadTimeoutMiddleware != nil {
+		uploadGroup.Use(uploadTimeoutMiddleware)
+	}
+	uploadGroup.Use(v1Middleware...)
+	uploadGroup.POST("/file/:record_type/:uuid", h.File.CreateForRecord)
 
 	exportGroup := r.Group("/v1")
 	exportGroup.Use(v1Middleware...) // Does not include same timeout
