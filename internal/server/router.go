@@ -92,6 +92,7 @@ func NewEngine() *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
+	r.Use(middleware.SecurityHeaders())
 	r.TrustedPlatform = gin.PlatformGoogleAppEngine
 
 	return r
@@ -100,6 +101,8 @@ func NewEngine() *gin.Engine {
 const (
 	DefaultRequestTimeout = 5 * time.Second
 	UploadRequestTimeout  = 2 * time.Minute
+
+	JSONBodyLimitBytes = 1 << 20 // 1 MB
 )
 
 type timeoutDurations struct {
@@ -174,6 +177,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies, opts ...RouteOpt
 	if isRelease {
 		authGroup.Use(middleware.RateLimitMiddleware())
 	}
+	authGroup.Use(middleware.JSONBodyLimit(JSONBodyLimitBytes))
 	{
 		authGroup.POST("/mobile/:provider", h.Auth.LoginMobile)
 		authGroup.POST("/development", h.Auth.LoginDevelopment)
@@ -193,6 +197,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies, opts ...RouteOpt
 		v1.Use(defaultTimeoutMiddleware)
 	}
 	v1.Use(v1Middleware...)
+	v1.Use(middleware.JSONBodyLimit(JSONBodyLimitBytes))
 	{
 		userGroup := v1.Group("/user")
 		{
