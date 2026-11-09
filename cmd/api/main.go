@@ -14,6 +14,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = server.UploadRequestTimeout + time.Minute
+	writeTimeout      = server.UploadRequestTimeout + time.Minute
+	idleTimeout       = 2 * time.Minute
+	maxHeaderBytes    = 1 << 20
+	shutdownGrace     = server.UploadRequestTimeout + time.Minute
+)
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -33,10 +42,7 @@ func main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: engine.Handler(),
-	}
+	srv := newHTTPServer(":"+port, engine.Handler())
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -47,12 +53,24 @@ func main() {
 	<-ctx.Done()
 	log.Println("Shutdown Server ...")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server Shutdown: %s", err)
 	}
 	log.Println("Server exiting")
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+	}
 }
 
 func configureGinMode() {

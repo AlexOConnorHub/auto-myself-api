@@ -98,8 +98,8 @@ func NewEngine() *gin.Engine {
 }
 
 const (
-	defaultRequestTimeout = 5 * time.Second
-	uploadRequestTimeout  = 2 * time.Minute
+	DefaultRequestTimeout = 5 * time.Second
+	UploadRequestTimeout  = 2 * time.Minute
 )
 
 type timeoutDurations struct {
@@ -138,8 +138,8 @@ func resolveTimeouts(mode string, override *timeoutDurations) *timeoutDurations 
 	}
 	if mode == gin.ReleaseMode {
 		return &timeoutDurations{
-			defaultTimeout: defaultRequestTimeout,
-			uploadTimeout:  uploadRequestTimeout,
+			defaultTimeout: DefaultRequestTimeout,
+			uploadTimeout:  UploadRequestTimeout,
 		}
 	}
 	return nil
