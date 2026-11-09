@@ -90,8 +90,8 @@ func Build(d Dependencies) *Handlers {
 
 func NewEngine() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery())
 	r.Use(middleware.Logger())
+	r.Use(middleware.Recovery())
 	r.TrustedPlatform = gin.PlatformGoogleAppEngine
 
 	return r
