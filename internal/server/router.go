@@ -204,6 +204,7 @@ func RegisterRoutes(r *gin.Engine, h *Handlers, d Dependencies, opts ...RouteOpt
 			userGroup.GET("", h.User.GetCurrentUser)
 			userGroup.PATCH("", h.User.UpdateUser)
 			userGroup.DELETE("", h.User.DeleteAccount)
+			userGroup.DELETE("/sessions", h.Auth.SignOutEverywhere)
 			userGroup.GET("/:uuid", h.User.GetUserByID)
 		}
 

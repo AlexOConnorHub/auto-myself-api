@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -313,6 +314,74 @@ func TestRefreshTokenIsStoredAsBcrypt(t *testing.T) {
 	if err := bcrypt.CompareHashAndPassword([]byte(storedToken), []byte(verifier)); err != nil {
 		t.Errorf("stored bcrypt hash does not match the verifier: %v", err)
 	}
+}
+
+func countRefreshTokens(t *testing.T, env *testutil.Env, userID uuid.UUID) int64 {
+	t.Helper()
+
+	var count int64
+	if err := env.DB.GetGorm().Unscoped().Model(&auth.RefreshToken{}).
+		Where("user_id = ?", userID).Count(&count).Error; err != nil {
+		t.Fatalf("counting refresh tokens: %v", err)
+	}
+	return count
+}
+
+func TestSignOutEverywhere(t *testing.T) {
+	env := testutil.SetupTest(t)
+
+	login := func(userID uuid.UUID) (authentication, refresh string) {
+		w := developmentLogin(t, env, userID.String())
+		testutil.RequireStatus(t, w, http.StatusOK)
+
+		var response struct {
+			Authentication string `json:"authentication"`
+			Refresh        string `json:"refresh"`
+		}
+		testutil.DecodeJSON(t, w, &response)
+		return response.Authentication, response.Refresh
+	}
+
+	bearer, firstRefresh := login(testutil.User1ID)
+	_, secondRefresh := login(testutil.User1ID)
+
+	w := testutil.RequestWithBearer(t, env.Router, http.MethodPost, "/auth/refresh", "",
+		testutil.JSONBody(t, map[string]string{"refresh_token": firstRefresh}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+	var rotated authResponse
+	testutil.DecodeJSON(t, w, &rotated)
+
+	_, otherRefresh := login(testutil.User2ID)
+
+	if got := countRefreshTokens(t, env, testutil.User1ID); got != 3 {
+		t.Fatalf("expected 3 stored refresh tokens for the caller before sign-out, got %d", got)
+	}
+
+	w = testutil.RequestWithBearer(t, env.Router, http.MethodDelete, "/v1/user/sessions", bearer, nil)
+	testutil.RequireStatus(t, w, http.StatusNoContent)
+	if w.Body.Len() != 0 {
+		t.Errorf("expected an empty 204 body, got %q", w.Body.String())
+	}
+
+	if got := countRefreshTokens(t, env, testutil.User1ID); got != 0 {
+		t.Errorf("expected all caller refresh tokens to be purged, got %d", got)
+	}
+	if got := countRefreshTokens(t, env, testutil.User2ID); got != 1 {
+		t.Errorf("sign-out everywhere must not touch another user's tokens, got %d", got)
+	}
+
+	for _, token := range []string{firstRefresh, rotated.Refresh, secondRefresh} {
+		w = testutil.RequestWithBearer(t, env.Router, http.MethodPost, "/auth/refresh", "",
+			testutil.JSONBody(t, map[string]string{"refresh_token": token}))
+		testutil.RequireStatus(t, w, http.StatusUnauthorized)
+	}
+
+	w = testutil.RequestWithBearer(t, env.Router, http.MethodPost, "/auth/refresh", "",
+		testutil.JSONBody(t, map[string]string{"refresh_token": otherRefresh}))
+	testutil.RequireStatus(t, w, http.StatusOK)
+
+	w = testutil.RequestWithBearer(t, env.Router, http.MethodDelete, "/v1/user/sessions", bearer, nil)
+	testutil.RequireStatus(t, w, http.StatusNoContent)
 }
 
 func TestMobileLoginGoogleCreatesUser(t *testing.T) {

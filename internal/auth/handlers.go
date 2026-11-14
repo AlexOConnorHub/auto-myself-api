@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"auto-myself-api/internal/helpers"
+	"auto-myself-api/internal/users"
+	"context"
 	"errors"
 	"net/http"
 
@@ -13,6 +16,7 @@ type AuthHandler interface {
 	LoginMobile(c *gin.Context)
 	RefreshToken(c *gin.Context)
 	LoginDevelopment(c *gin.Context)
+	SignOutEverywhere(c *gin.Context)
 }
 
 type Handler struct {
@@ -88,6 +92,21 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"jwt": userAuth.JWT, "refresh": userAuth.Refresh})
+}
+
+// SignOutEverywhere revokes every refresh token for the current user.
+func (h *Handler) SignOutEverywhere(c *gin.Context) {
+	user := c.MustGet(helpers.UserCtxKey).(*users.User)
+	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, user)
+
+	if err := h.authService.SignOutEverywhere(ctx); err != nil {
+		slog.Get(c).ErrorContext(ctx, "failed to sign out everywhere", "user_id", user.ID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	slog.Get(c).InfoContext(ctx, "signed out everywhere", "user_id", user.ID)
+	c.Status(http.StatusNoContent)
 }
 
 // LoginDevelopment is a development-only helper.

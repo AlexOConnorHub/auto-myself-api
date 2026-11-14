@@ -19,6 +19,7 @@ type AuthRepository interface {
 	CreateUserWithIdentity(context.Context, *users.User, *Identity) error
 	CreateRefreshToken(context.Context, *RefreshToken) error
 	RotateRefreshToken(context.Context, uuid.UUID, string, *RefreshToken) (uuid.UUID, error)
+	DeleteRefreshTokensForUser(context.Context, uuid.UUID) error
 }
 
 type Repository struct {
@@ -75,9 +76,6 @@ func (r *Repository) CreateRefreshToken(ctx context.Context, token *RefreshToken
 	return helpers.Create[RefreshToken](ctx, r.database.GetGorm(), token)
 }
 
-// RotateRefreshToken validates the verifier against the stored bcrypt hash and, in one
-// transaction, consumes the old row and inserts newToken. Unknown, expired, or mismatched
-// tokens yield gorm.ErrRecordNotFound.
 func (r *Repository) RotateRefreshToken(ctx context.Context, tokenID uuid.UUID, verifier string, newToken *RefreshToken) (uuid.UUID, error) {
 	var userID uuid.UUID
 
@@ -113,6 +111,14 @@ func (r *Repository) RotateRefreshToken(ctx context.Context, tokenID uuid.UUID, 
 		return uuid.Nil, err
 	}
 	return userID, nil
+}
+
+func (r *Repository) DeleteRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error {
+	return r.database.GetGorm().WithContext(ctx).
+		Unscoped().
+		Where("user_id = ?", userID).
+		Delete(&RefreshToken{}).
+		Error
 }
 
 // compile-time assertion that the concrete repository satisfies its interface.

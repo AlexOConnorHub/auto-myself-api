@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"auto-myself-api/internal/helpers"
 	"auto-myself-api/internal/secrets"
 	"auto-myself-api/internal/users"
 	"context"
@@ -35,6 +36,7 @@ type AuthService interface {
 	LoginMobile(context.Context, string, MobileLoginRequest) (*UserAuthResponse, error)
 	RefreshToken(context.Context, RefreshTokenRequest) (*UserAuthResponse, error)
 	DevelopmentLogin(context.Context, DevelopmentLoginRequest) (*UserAuthResponse, error)
+	SignOutEverywhere(context.Context) error
 }
 
 type Service struct {
@@ -172,6 +174,15 @@ func (s *Service) DevelopmentLogin(ctx context.Context, request DevelopmentLogin
 	}
 
 	return s.userToUserAuthResponse(ctx, user)
+}
+
+func (s *Service) SignOutEverywhere(ctx context.Context) error {
+	user := ctx.Value(helpers.UserCtxKey).(*users.User)
+
+	if err := s.authRepository.DeleteRefreshTokensForUser(ctx, user.ID); err != nil {
+		return fmt.Errorf("deleting refresh tokens for user %s: %w", user.ID, err)
+	}
+	return nil
 }
 
 func (s *Service) userToUserAuthResponse(ctx context.Context, user *users.User) (*UserAuthResponse, error) {
