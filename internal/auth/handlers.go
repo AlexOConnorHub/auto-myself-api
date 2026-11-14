@@ -94,7 +94,6 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"jwt": userAuth.JWT, "refresh": userAuth.Refresh})
 }
 
-// SignOutEverywhere revokes every refresh token for the current user.
 func (h *Handler) SignOutEverywhere(c *gin.Context) {
 	user := c.MustGet(helpers.UserCtxKey).(*users.User)
 	ctx := context.WithValue(c.Request.Context(), helpers.UserCtxKey, user)
