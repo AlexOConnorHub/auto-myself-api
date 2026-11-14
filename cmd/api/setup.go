@@ -23,6 +23,22 @@ var requiredSecrets = []string{
 	"JWT_SIGNING_SECRET",
 }
 
+type signedURLVerifier interface {
+	VerifySignedURL(ctx context.Context) error
+}
+
+var _ signedURLVerifier = (*storage.GCS)(nil)
+
+func verifyStorageSigning(ctx context.Context, mode string, verifier signedURLVerifier) error {
+	if mode != gin.ReleaseMode {
+		return nil
+	}
+	if err := verifier.VerifySignedURL(ctx); err != nil {
+		return fmt.Errorf("verifying storage signing: %w", err)
+	}
+	return nil
+}
+
 func Setup(ctx context.Context, r *gin.Engine) (func(), error) {
 	secretStore, err := secrets.SetupSecrets(ctx, requiredSecrets)
 	if err != nil {
@@ -51,7 +67,19 @@ func Setup(ctx context.Context, r *gin.Engine) (func(), error) {
 		return nil, fmt.Errorf("connecting to database: %w", err)
 	}
 
-	bucketStorage := storage.NewGCS(google.GetBucketName())
+	bucketName := google.GetBucketName()
+	bucketStorage := storage.NewGCS(bucketName)
+	mode := gin.Mode()
+
+	if err := verifyStorageSigning(ctx, mode, bucketStorage); err != nil {
+		_ = bucketStorage.Close()
+		_ = secretStore.Close()
+		_ = db.Close()
+		return nil, fmt.Errorf("verifying storage for bucket %s: %w", bucketName, err)
+	}
+	if mode == gin.ReleaseMode {
+		slog.Info("storage signed-URL signing verified", "bucket", bucketName)
+	}
 
 	deps := server.Dependencies{
 		Database:          db,

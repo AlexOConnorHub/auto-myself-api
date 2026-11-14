@@ -9,15 +9,14 @@ import (
 	"cloud.google.com/go/storage"
 )
 
-// GCS implements files.StorageRepository against a single Cloud Storage bucket. The client is
-// created lazily so that a debug-mode process can start without Google credentials and reused
-// for every operation afterwards.
 type GCS struct {
 	bucketName string
 	once       sync.Once
 	client     *storage.Client
 	err        error
 }
+
+const startupCheckKey = "startup-check"
 
 func NewGCS(bucketName string) *GCS {
 	return &GCS{bucketName: bucketName}
@@ -71,6 +70,16 @@ func (g *GCS) SignedURL(ctx context.Context, key string, ttl time.Duration) (str
 		return "", fmt.Errorf("signing URL for object %s: %w", key, err)
 	}
 	return url, nil
+}
+
+func (g *GCS) VerifySignedURL(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := g.SignedURL(ctx, startupCheckKey, time.Minute); err != nil {
+		return fmt.Errorf("verifying signed-URL signing: %w", err)
+	}
+	return nil
 }
 
 func (g *GCS) Close() error {
